@@ -2,6 +2,8 @@
 
 在当前 Mac 上运行的局域网打印网站。上传一个 PDF 或静态 JPEG、PNG、HEIC／HEIF、WebP，选择纸张、页码、份数、色彩和单双面，提交到 Canon E560 的本机 CUPS 队列。无需登录，不包含公网发布。
 
+<img src="design/demo.png" alt="OpenCanon 演示" width="640">
+
 ## 本机运行
 
 需要 Go 1.26.1、macOS 的 CUPS／sips、Poppler 的 pdfinfo，以及官方 Canon E560 驱动和 `OpenCanon_E560` 队列。实际映射和依据见 [config/README.md](config/README.md)。不要将通用 PostScript 队列替代该驱动。
