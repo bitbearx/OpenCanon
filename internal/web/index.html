@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#E9EBE6">
+<title>家庭打印 · 上传与设置</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+
+<main class="app">
+
+  <header class="masthead">
+    <div class="brand">
+      <svg class="regmark" viewBox="0 0 34 34" aria-hidden="true">
+        <circle cx="10.5" cy="10.5" r="6" fill="#0B9AC0"/>
+        <circle cx="23.5" cy="10.5" r="6" fill="#D4187A"/>
+        <circle cx="10.5" cy="23.5" r="6" fill="#F0C200"/>
+        <circle cx="23.5" cy="23.5" r="6" fill="#111A1C"/>
+      </svg>
+      <div>
+        <h1>家庭打印</h1>
+        <p class="printer"><span class="led" aria-hidden="true"></span><span id="printerState">正在检查打印队列…</span> <span class="ip" id="printerAddress">尚未扫描</span></p>
+      </div>
+    </div>
+
+    <button type="button" class="rescan" id="recheckBtn">
+      <svg class="rescan-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor"
+           stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M6 7V3.5h8V7"/>
+        <rect x="2.5" y="7" width="15" height="6.5" rx="1.2"/>
+        <path d="M6 10.5h8v6H6z"/>
+        <path d="M14.4 9.6h.01"/>
+      </svg>
+      <span id="recheckLabel">扫描打印机</span>
+    </button>
+  </header>
+
+  <p id="printerReason" role="status"></p>
+  <p id="discoveryStatus" role="status">尚未发现打印机，扫描后将保存地址。</p>
+  <div class="layout" id="layout">
+
+    <!-- 左列：上传 / 文件预览 -->
+    <div>
+      <div class="stage" id="stage">
+        <input class="sr-only" type="file" id="file" accept="application/pdf,image/jpeg,image/png,image/heic,image/heif,image/webp,.heic,.heif">
+
+        <label class="paper empty" id="empty" for="file">
+          <span class="crop tl"></span><span class="crop tr"></span>
+          <span class="crop bl"></span><span class="crop br"></span>
+
+          <svg class="sheet-icon" viewBox="0 0 44 52" fill="none" stroke="currentColor"
+               stroke-width="1.2" stroke-linejoin="round" stroke-linecap="round" aria-hidden="true">
+            <path d="M4 1h24l12 12v38H4z"/>
+            <path d="M28 1v12h12"/>
+            <path d="M22 24v14M15 31h14"/>
+          </svg>
+
+          <span class="empty-title">把文件放到这里</span>
+          <p class="empty-sub">选择一个 PDF、JPEG、PNG、HEIC／HEIF 或 WebP，最大 20 MiB</p>
+          <span class="sheet-cta">选择文件</span>
+          <p class="sheet-note">上传文件保留 1 小时；重启即失效。提交后清理应用副本，系统打印队列另行保留。</p>
+        </label>
+
+        <div class="paper filled" id="filled" hidden>
+          <span class="crop tl"></span><span class="crop tr"></span>
+          <span class="crop bl"></span><span class="crop br"></span>
+
+          <div class="preview" id="preview"></div>
+
+          <div class="filemeta" id="filemeta">
+            <p class="fname" id="fname"></p>
+            <p class="fsub" id="fsub"></p>
+          </div>
+
+          <div class="fileacts">
+            <button type="button" class="ghost" id="replaceBtn">更换文件</button>
+            <button type="button" class="ghost danger" id="removeBtn">移除</button>
+          </div>
+        </div>
+      </div>
+
+      <p class="file-err" id="fileErr" role="alert" hidden></p>
+      <p class="sr-only" id="queueStatus" role="status" aria-live="polite"></p>
+    </div>
+
+    <!-- 右列：打印设置 -->
+    <section class="panel" id="panel" hidden aria-labelledby="panelTitle">
+      <h2 id="panelTitle">打印设置</h2>
+
+      <div class="rows">
+        <div class="row">
+          <label class="row-label" for="size">尺寸</label>
+          <div class="field">
+            <select id="size" aria-label="纸张尺寸"></select>
+          </div>
+        </div>
+
+        <div class="row" id="rangeRow" hidden>
+          <label class="row-label" for="rangeMode">打印范围</label>
+          <div class="field">
+            <select id="rangeMode">
+              <option value="all">全部页面</option>
+              <option value="custom">指定页码</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="row" id="pageRow" hidden>
+          <label class="row-label" for="rangeText">页码</label>
+          <div class="field">
+            <input type="text" class="range-input" id="rangeText" placeholder="1-3, 5" autocomplete="off" spellcheck="false">
+          </div>
+        </div>
+        <p class="err" id="rangeErr" hidden></p>
+
+        <div class="row">
+          <label class="row-label" for="copies">份数</label>
+          <div class="field">
+            <div class="stepper">
+              <button type="button" id="minus" aria-label="减少份数">−</button>
+              <input type="text" inputmode="numeric" id="copies" value="1" readonly aria-label="份数">
+              <button type="button" id="plus" aria-label="增加份数">＋</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="row">
+          <label class="row-label" for="color">色彩</label>
+          <div class="field">
+            <select id="color"></select>
+          </div>
+        </div>
+        <p class="hint" id="colorHint">将内容以黑白或灰度打印；实际用墨由打印机决定。</p>
+
+        <div class="row">
+          <label class="row-label" for="duplex">双面</label>
+          <div class="field">
+            <select id="duplex"></select>
+          </div>
+        </div>
+        <p class="hint" id="duplexHint">每张纸只印一面，用纸最多。</p>
+
+        <details class="glossary">
+          <summary>长边、短边是什么意思</summary>
+          <div class="glossary-body">
+            <dl>
+              <div>
+                <dt>单面</dt>
+                <dd>每张纸只印一面，背面空着。</dd>
+              </div>
+              <div>
+                <dt>双面 · 长边翻转</dt>
+                <dd>沿纸张的实际长边翻面。竖向文档通常像翻书左右翻。</dd>
+              </div>
+              <div>
+                <dt>双面 · 短边翻转</dt>
+                <dd>沿纸张的实际短边翻面。竖向文档通常上下翻。</dd>
+              </div>
+            </dl>
+            <p class="note">横向文档的翻阅方向相反。长／短边始终指纸张的实际边；仅提供驱动支持的双面选项。</p>
+
+            <svg class="flip" viewBox="0 0 320 158" role="img"
+                 aria-label="长边翻转时页面左右翻动，短边翻转时页面上下翻动">
+              <defs>
+                <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5"
+                        markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                  <path d="M0 0 L10 5 L0 10 z" fill="currentColor"/>
+                </marker>
+              </defs>
+
+              <g>
+                <rect class="sheetline" x="30" y="38" width="64" height="88" rx="1"/>
+                <line class="fold" x1="62" y1="38" x2="62" y2="126"/>
+                <path class="arrow" d="M40 27 Q62 9 84 27" marker-end="url(#ah)"/>
+                <text x="62" y="150" text-anchor="middle">竖向长边 · 左右翻</text>
+              </g>
+
+              <g>
+                <rect class="sheetline" x="206" y="38" width="64" height="88" rx="1"/>
+                <line class="fold" x1="206" y1="82" x2="270" y2="82"/>
+                <path class="arrow" d="M198 48 Q182 82 198 116" marker-end="url(#ah)"/>
+                <text x="238" y="150" text-anchor="middle">竖向短边 · 上下翻</text>
+              </g>
+            </svg>
+          </div>
+        </details>
+      </div>
+    </section>
+
+  </div>
+</main>
+
+<!-- 底部：打印工单 + 主操作 -->
+<div class="dock" id="dock" hidden>
+  <div class="dock-inner">
+    <div class="ticket">
+      <p class="ticket-main" id="ticketMain">A4 · 单色（黑白／灰度） · 1 份</p>
+      <p class="ticket-sub" id="ticketSub">1 页 · 1 张纸</p>
+    </div>
+    <button class="primary" id="printBtn" disabled>打印</button>
+  </div>
+</div>
+
+<dialog class="dlg" id="dlg" aria-labelledby="dlgTitle">
+  <div class="dlg-view" id="viewConfirm">
+    <h2 id="dlgTitle">确认打印</h2>
+    <dl class="recap" id="recap"></dl>
+    <p class="dlg-note" id="dlgNote">确认后提交到本机打印队列；实际输出请查看打印机。</p>
+    <div class="dlg-actions">
+      <button type="button" class="ghost" id="cancelBtn">取消</button>
+      <button type="button" class="primary" id="confirmBtn">确认打印</button>
+    </div>
+  </div>
+
+  <div class="dlg-view" id="viewSending" hidden>
+    <div class="spinner" aria-hidden="true"></div>
+    <p class="dlg-msg" role="status">正在提交到打印队列…</p>
+  </div>
+
+  <div class="dlg-view" id="viewDone" hidden>
+    <svg class="check" viewBox="0 0 40 40" fill="none" stroke="currentColor"
+         stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <circle cx="20" cy="20" r="18" stroke-opacity=".35"/>
+      <path d="M12 20.5l5.5 5.5L28 15"/>
+    </svg>
+    <p class="dlg-msg" role="status">已提交到打印队列</p>
+    <p class="dlg-note"><span id="jobStatus">正在查询任务状态…</span></p>
+    <div class="dlg-actions">
+      <button type="button" class="primary" id="doneBtn">完成</button>
+    </div>
+  </div>
+</dialog>
+
+<script src="/app.js" defer></script>
+</body>
+</html>

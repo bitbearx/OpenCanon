@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>Label</key><string>local.opencanon</string>
+  <key>ProgramArguments</key><array>
+    <string>/Users/moli/Library/Application Support/OpenCanon/opencanon</string>
+    <string>-listen</string><string>0.0.0.0:8088</string>
+    <string>-printer-config</string><string>/Users/moli/Library/Application Support/OpenCanon/printer.json</string>
+    <string>-data-dir</string><string>/Users/moli/Library/Application Support/OpenCanon/data</string>
+    <string>-pdfinfo</string><string>/opt/homebrew/bin/pdfinfo</string>
+  </array>
+  <key>WorkingDirectory</key><string>/Users/moli/Library/Application Support/OpenCanon</string>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>ThrottleInterval</key><integer>10</integer>
+  <key>StandardOutPath</key><string>/Users/moli/Library/Application Support/OpenCanon/service.log</string>
+  <key>StandardErrorPath</key><string>/Users/moli/Library/Application Support/OpenCanon/service-error.log</string>
+  <key>EnvironmentVariables</key><dict>
+    <key>PATH</key><string>/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    <key>LC_ALL</key><string>C</string>
+  </dict>
+</dict></plist>

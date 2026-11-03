@@ -1,0 +1,473 @@
+{
+  "queue": "OpenCanon_E560",
+  "media": [
+    {
+      "id": "A4",
+      "label": "A4（210 × 297 mm）",
+      "widthMM": 210,
+      "heightMM": 297,
+      "options": {
+        "PageSize": "A4",
+        "CNIJMediaType": "0",
+        "CNIJMarginType": "0"
+      }
+    },
+    {
+      "id": "A5",
+      "label": "A5（148 × 210 mm）",
+      "widthMM": 148,
+      "heightMM": 210,
+      "options": {
+        "PageSize": "A5",
+        "CNIJMediaType": "0",
+        "CNIJMarginType": "0"
+      }
+    },
+    {
+      "id": "JIS-B5",
+      "label": "JIS B5（182 × 257 mm）",
+      "widthMM": 182,
+      "heightMM": 257,
+      "options": {
+        "PageSize": "B5",
+        "CNIJMediaType": "0",
+        "CNIJMarginType": "0"
+      }
+    },
+    {
+      "id": "Letter",
+      "label": "Letter（215.9 × 279.4 mm）",
+      "widthMM": 215.9,
+      "heightMM": 279.4,
+      "options": {
+        "PageSize": "Letter",
+        "CNIJMediaType": "0",
+        "CNIJMarginType": "0"
+      }
+    },
+    {
+      "id": "Legal",
+      "label": "Legal（215.9 × 355.6 mm）",
+      "widthMM": 215.9,
+      "heightMM": 355.6,
+      "options": {
+        "PageSize": "Legal",
+        "CNIJMediaType": "0",
+        "CNIJMarginType": "0"
+      }
+    },
+    {
+      "id": "4x6",
+      "label": "4 × 6 英寸照片纸（101.6 × 152.4 mm）",
+      "widthMM": 101.6,
+      "heightMM": 152.4,
+      "options": {
+        "PageSize": "4x6",
+        "CNIJMediaType": "50",
+        "CNIJMarginType": "0"
+      }
+    },
+    {
+      "id": "5x7",
+      "label": "5 × 7 英寸照片纸（127 × 177.8 mm）",
+      "widthMM": 127,
+      "heightMM": 177.8,
+      "options": {
+        "PageSize": "5x7",
+        "CNIJMediaType": "50",
+        "CNIJMarginType": "0"
+      }
+    },
+    {
+      "id": "8x10",
+      "label": "8 × 10 英寸照片纸（203.2 × 254 mm）",
+      "widthMM": 203.2,
+      "heightMM": 254,
+      "options": {
+        "PageSize": "8x10",
+        "CNIJMediaType": "50",
+        "CNIJMarginType": "0"
+      }
+    },
+    {
+      "id": "L",
+      "label": "L 照片纸（89 × 127 mm）",
+      "widthMM": 89,
+      "heightMM": 127,
+      "options": {
+        "PageSize": "89x127mm",
+        "CNIJMediaType": "50",
+        "CNIJMarginType": "0"
+      }
+    },
+    {
+      "id": "Postcard",
+      "label": "明信片（100 × 148 mm）",
+      "widthMM": 100,
+      "heightMM": 148,
+      "options": {
+        "PageSize": "Postcard",
+        "CNIJMediaType": "7",
+        "CNIJMarginType": "0"
+      }
+    },
+    {
+      "id": "DoublePostcard",
+      "label": "双明信片（200 × 148 mm）",
+      "widthMM": 200,
+      "heightMM": 148,
+      "options": {
+        "PageSize": "DoublePostcard",
+        "CNIJMediaType": "7",
+        "CNIJMarginType": "0"
+      }
+    },
+    {
+      "id": "Env10",
+      "label": "10 号信封（104.8 × 241.3 mm）",
+      "widthMM": 104.8,
+      "heightMM": 241.3,
+      "options": {
+        "PageSize": "Env10",
+        "CNIJMediaType": "8",
+        "CNIJMarginType": "0"
+      }
+    },
+    {
+      "id": "EnvDL",
+      "label": "DL 信封（110 × 220 mm）",
+      "widthMM": 110,
+      "heightMM": 220,
+      "options": {
+        "PageSize": "EnvDL",
+        "CNIJMediaType": "8",
+        "CNIJMarginType": "0"
+      }
+    },
+    {
+      "id": "EnvYou4",
+      "label": "洋形 4 号信封（105 × 235 mm）",
+      "widthMM": 105,
+      "heightMM": 235,
+      "options": {
+        "PageSize": "EnvYou4",
+        "CNIJMediaType": "8",
+        "CNIJMarginType": "0"
+      }
+    },
+    {
+      "id": "EnvYou6",
+      "label": "洋形 6 号信封（98 × 190 mm）",
+      "widthMM": 98,
+      "heightMM": 190,
+      "options": {
+        "PageSize": "98x190mm",
+        "CNIJMediaType": "8",
+        "CNIJMarginType": "0"
+      }
+    }
+  ],
+  "colorModes": [
+    {
+      "id": "color",
+      "label": "彩色",
+      "options": {
+        "CNIJGrayScale": "0",
+        "CNIJGrayScaleCheckBox": "0"
+      }
+    },
+    {
+      "id": "mono",
+      "label": "单色（黑白／灰度）",
+      "options": {
+        "CNIJGrayScale": "1",
+        "CNIJGrayScaleCheckBox": "1"
+      }
+    }
+  ],
+  "duplexModes": [
+    {
+      "id": "single",
+      "label": "单面",
+      "options": {
+        "Duplex": "None"
+      }
+    },
+    {
+      "id": "long",
+      "label": "双面 · 长边翻转",
+      "options": {
+        "Duplex": "DuplexNoTumble"
+      }
+    },
+    {
+      "id": "short",
+      "label": "双面 · 短边翻转",
+      "options": {
+        "Duplex": "DuplexTumble"
+      }
+    }
+  ],
+  "constraints": [
+    {
+      "mediaId": "A5",
+      "colorMode": "color",
+      "duplex": "long"
+    },
+    {
+      "mediaId": "A5",
+      "colorMode": "color",
+      "duplex": "short"
+    },
+    {
+      "mediaId": "A5",
+      "colorMode": "mono",
+      "duplex": "long"
+    },
+    {
+      "mediaId": "A5",
+      "colorMode": "mono",
+      "duplex": "short"
+    },
+    {
+      "mediaId": "JIS-B5",
+      "colorMode": "color",
+      "duplex": "long"
+    },
+    {
+      "mediaId": "JIS-B5",
+      "colorMode": "color",
+      "duplex": "short"
+    },
+    {
+      "mediaId": "JIS-B5",
+      "colorMode": "mono",
+      "duplex": "long"
+    },
+    {
+      "mediaId": "JIS-B5",
+      "colorMode": "mono",
+      "duplex": "short"
+    },
+    {
+      "mediaId": "Legal",
+      "colorMode": "color",
+      "duplex": "long"
+    },
+    {
+      "mediaId": "Legal",
+      "colorMode": "color",
+      "duplex": "short"
+    },
+    {
+      "mediaId": "Legal",
+      "colorMode": "mono",
+      "duplex": "long"
+    },
+    {
+      "mediaId": "Legal",
+      "colorMode": "mono",
+      "duplex": "short"
+    },
+    {
+      "mediaId": "4x6",
+      "colorMode": "color",
+      "duplex": "long"
+    },
+    {
+      "mediaId": "4x6",
+      "colorMode": "color",
+      "duplex": "short"
+    },
+    {
+      "mediaId": "4x6",
+      "colorMode": "mono",
+      "duplex": "long"
+    },
+    {
+      "mediaId": "4x6",
+      "colorMode": "mono",
+      "duplex": "short"
+    },
+    {
+      "mediaId": "5x7",
+      "colorMode": "color",
+      "duplex": "long"
+    },
+    {
+      "mediaId": "5x7",
+      "colorMode": "color",
+      "duplex": "short"
+    },
+    {
+      "mediaId": "5x7",
+      "colorMode": "mono",
+      "duplex": "long"
+    },
+    {
+      "mediaId": "5x7",
+      "colorMode": "mono",
+      "duplex": "short"
+    },
+    {
+      "mediaId": "8x10",
+      "colorMode": "color",
+      "duplex": "long"
+    },
+    {
+      "mediaId": "8x10",
+      "colorMode": "color",
+      "duplex": "short"
+    },
+    {
+      "mediaId": "8x10",
+      "colorMode": "mono",
+      "duplex": "long"
+    },
+    {
+      "mediaId": "8x10",
+      "colorMode": "mono",
+      "duplex": "short"
+    },
+    {
+      "mediaId": "L",
+      "colorMode": "color",
+      "duplex": "long"
+    },
+    {
+      "mediaId": "L",
+      "colorMode": "color",
+      "duplex": "short"
+    },
+    {
+      "mediaId": "L",
+      "colorMode": "mono",
+      "duplex": "long"
+    },
+    {
+      "mediaId": "L",
+      "colorMode": "mono",
+      "duplex": "short"
+    },
+    {
+      "mediaId": "Postcard",
+      "colorMode": "color",
+      "duplex": "long"
+    },
+    {
+      "mediaId": "Postcard",
+      "colorMode": "color",
+      "duplex": "short"
+    },
+    {
+      "mediaId": "Postcard",
+      "colorMode": "mono",
+      "duplex": "long"
+    },
+    {
+      "mediaId": "Postcard",
+      "colorMode": "mono",
+      "duplex": "short"
+    },
+    {
+      "mediaId": "DoublePostcard",
+      "colorMode": "color",
+      "duplex": "long"
+    },
+    {
+      "mediaId": "DoublePostcard",
+      "colorMode": "color",
+      "duplex": "short"
+    },
+    {
+      "mediaId": "DoublePostcard",
+      "colorMode": "mono",
+      "duplex": "long"
+    },
+    {
+      "mediaId": "DoublePostcard",
+      "colorMode": "mono",
+      "duplex": "short"
+    },
+    {
+      "mediaId": "Env10",
+      "colorMode": "color",
+      "duplex": "long"
+    },
+    {
+      "mediaId": "Env10",
+      "colorMode": "color",
+      "duplex": "short"
+    },
+    {
+      "mediaId": "Env10",
+      "colorMode": "mono",
+      "duplex": "long"
+    },
+    {
+      "mediaId": "Env10",
+      "colorMode": "mono",
+      "duplex": "short"
+    },
+    {
+      "mediaId": "EnvDL",
+      "colorMode": "color",
+      "duplex": "long"
+    },
+    {
+      "mediaId": "EnvDL",
+      "colorMode": "color",
+      "duplex": "short"
+    },
+    {
+      "mediaId": "EnvDL",
+      "colorMode": "mono",
+      "duplex": "long"
+    },
+    {
+      "mediaId": "EnvDL",
+      "colorMode": "mono",
+      "duplex": "short"
+    },
+    {
+      "mediaId": "EnvYou4",
+      "colorMode": "color",
+      "duplex": "long"
+    },
+    {
+      "mediaId": "EnvYou4",
+      "colorMode": "color",
+      "duplex": "short"
+    },
+    {
+      "mediaId": "EnvYou4",
+      "colorMode": "mono",
+      "duplex": "long"
+    },
+    {
+      "mediaId": "EnvYou4",
+      "colorMode": "mono",
+      "duplex": "short"
+    },
+    {
+      "mediaId": "EnvYou6",
+      "colorMode": "color",
+      "duplex": "long"
+    },
+    {
+      "mediaId": "EnvYou6",
+      "colorMode": "color",
+      "duplex": "short"
+    },
+    {
+      "mediaId": "EnvYou6",
+      "colorMode": "mono",
+      "duplex": "long"
+    },
+    {
+      "mediaId": "EnvYou6",
+      "colorMode": "mono",
+      "duplex": "short"
+    }
+  ]
+}

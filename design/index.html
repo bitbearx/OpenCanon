@@ -1,0 +1,1476 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#E9EBE6">
+<title>家庭打印 · 上传与设置</title>
+<style>
+  /* ---------- 设计变量 ---------- */
+  :root{
+    --page:#E9EBE6;        /* 桌面底色（灰绿） */
+    --paper:#FFFFFF;       /* 纸张 */
+    --ink:#111A1C;         /* 正文（四色黑的印刷黑） */
+    --ink-2:#53625F;       /* 次要文字 */
+    --ink-3:#86938F;       /* 弱文字、图标 */
+    --rule:#D2D8D0;        /* 细分割线 */
+    --crop:#B9C2BA;        /* 裁切线 */
+    --cyan:#0B6E8C;        /* 主操作（印刷青） */
+    --cyan-deep:#08566E;
+    --magenta:#B3125C;     /* 错误、移除（印刷品红） */
+    --green:#2C7A4F;       /* 打印机就绪 */
+
+    --serif:"Songti SC","Source Han Serif SC","Noto Serif CJK SC",STSong,"SimSun",serif;
+    --sans:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",system-ui,sans-serif;
+  }
+
+  *[hidden]{display:none!important}
+  *,*::before,*::after{box-sizing:border-box}
+
+  html{-webkit-text-size-adjust:100%}
+  body{
+    margin:0;
+    background-color:var(--page);
+    /* 极淡的校准网点，呼应印刷打样台 */
+    background-image:radial-gradient(circle at 1px 1px,rgba(17,26,28,.055) 1px,transparent 0);
+    background-size:22px 22px;
+    color:var(--ink);
+    font-family:var(--sans);
+    font-size:16px;
+    line-height:1.55;
+    -webkit-font-smoothing:antialiased;
+  }
+  body.has-dock{padding-bottom:104px}
+
+  button{font:inherit;color:inherit;cursor:pointer}
+  :focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
+
+  .sr-only{
+    position:absolute;width:1px;height:1px;margin:-1px;
+    clip-path:inset(50%);overflow:hidden;white-space:nowrap;
+  }
+
+  .app{max-width:1040px;margin:0 auto;padding:0 20px}
+
+  /* ---------- 页头 ---------- */
+  .masthead{
+    display:flex;align-items:center;gap:12px;
+    padding:20px 0 16px;
+    border-bottom:1px solid var(--rule);
+  }
+  .regmark{width:30px;height:30px;flex:none}
+  .masthead h1{
+    margin:0;
+    font-family:var(--serif);
+    font-size:26px;font-weight:600;letter-spacing:.01em;line-height:1.15;
+  }
+  .printer{
+    margin:1px 0 0;font-size:13px;color:var(--ink-2);
+    display:flex;align-items:center;gap:6px;flex-wrap:wrap;
+  }
+  .led{
+    width:7px;height:7px;border-radius:50%;
+    background:var(--green);
+    box-shadow:0 0 0 3px rgba(44,122,79,.14);
+    flex:none;
+  }
+  .printer .ip{color:var(--ink-3)}
+
+  /* ---------- 布局 ---------- */
+  .layout{padding:22px 0 8px}
+  /* 未选文件时，把这张纸放在屏幕中段，像桌面上单独一张纸 */
+  .layout:not(.split){
+    display:flex;align-items:center;
+    min-height:calc(100svh - 128px);
+    padding:16px 0 24px;
+  }
+  .layout:not(.split) > div{width:100%}
+  @media (min-width:900px){
+    .layout.split{
+      display:grid;
+      grid-template-columns:minmax(0,1.02fr) minmax(0,.98fr);
+      gap:0 32px;
+      align-items:start;
+    }
+  }
+
+  /* ---------- 纸张（上传区 / 预览区共用） ---------- */
+  .stage{position:relative;max-width:560px;margin:0 auto;padding-bottom:16px}
+  .layout.split .stage{max-width:none;margin:0}
+  /* 纸张下方露出的纸摞，制造"待打印纸"的实体感 */
+  .stage::before,.stage::after{
+    content:"";position:absolute;bottom:9px;height:22px;
+    background:var(--paper);border:1px solid var(--rule);border-top:0;
+    border-radius:0 0 3px 3px;z-index:0;
+  }
+  .stage::before{left:8px;right:8px}
+  .stage::after{left:16px;right:16px;bottom:2px}
+
+  .paper{
+    position:relative;z-index:1;
+    background:var(--paper);
+    border:1px solid var(--rule);
+    border-radius:3px;
+    box-shadow:0 1px 2px rgba(17,26,28,.05);
+  }
+
+  .crop{position:absolute;width:16px;height:16px;border:0 solid var(--crop);pointer-events:none}
+  .crop.tl{top:10px;left:10px;border-top-width:1px;border-left-width:1px}
+  .crop.tr{top:10px;right:10px;border-top-width:1px;border-right-width:1px}
+  .crop.bl{bottom:10px;left:10px;border-bottom-width:1px;border-left-width:1px}
+  .crop.br{bottom:10px;right:10px;border-bottom-width:1px;border-right-width:1px}
+
+  /* 空状态：整张纸就是上传按钮 */
+  .empty{
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+    gap:4px;text-align:center;
+    min-height:332px;padding:32px 20px;
+    cursor:pointer;
+    transition:border-color .15s ease,background-color .15s ease;
+  }
+  .empty:hover{border-color:var(--cyan);background:#FBFDFD}
+  /* 键盘聚焦到隐藏的文件输入时，给当前这张纸画上焦点框 */
+  #file:focus-visible ~ .paper{outline:2px solid var(--cyan);outline-offset:2px}
+
+  .sheet-icon{width:44px;height:52px;color:var(--ink-3);margin-bottom:10px}
+  .empty-title{
+    font-family:var(--serif);font-size:20px;font-weight:600;letter-spacing:.01em;
+  }
+  .empty-sub{font-size:13.5px;color:var(--ink-2);margin:0}
+  .sheet-cta{
+    margin-top:14px;
+    display:inline-flex;align-items:center;justify-content:center;
+    min-height:44px;padding:0 22px;
+    border:1px solid var(--ink);border-radius:2px;
+    font-size:15px;font-weight:500;
+    transition:background-color .15s ease,color .15s ease;
+  }
+  .empty:hover .sheet-cta{background:var(--ink);color:var(--paper)}
+  .sheet-note{
+    margin:12px 0 0;font-size:12.5px;color:var(--ink-3);
+    max-width:30ch;
+  }
+
+  /* 已选中文件的纸张 */
+  .filled{display:flex;flex-direction:column;gap:14px;padding:18px 16px 16px}
+  .preview{display:flex;align-items:center;justify-content:center;min-height:180px}
+  .preview img{
+    display:block;max-width:100%;max-height:300px;
+    border:1px solid var(--rule);background:#fff;
+  }
+  .docph{
+    width:100%;min-height:190px;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;
+    border:1px solid var(--rule);color:var(--ink-2);font-size:13px;
+  }
+  .docph svg{width:34px;height:40px;color:var(--ink-3)}
+  .fname{
+    margin:0;font-size:15px;font-weight:600;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  }
+  .fsub{margin:2px 0 0;font-size:13px;color:var(--ink-2);font-variant-numeric:tabular-nums}
+  .fileacts{display:flex;gap:8px}
+  .ghost{
+    border:1px solid var(--rule);background:var(--paper);border-radius:2px;
+    min-height:40px;padding:0 14px;font-size:14px;
+    transition:border-color .15s ease,color .15s ease;
+  }
+  .ghost:hover{border-color:var(--ink-3)}
+  .ghost.danger{color:var(--magenta)}
+  .ghost.danger:hover{border-color:var(--magenta)}
+
+  /* 照片队列：列表从上到下就是打印顺序 */
+  .stage.dragover .paper{border-color:var(--cyan);box-shadow:0 0 0 3px rgba(11,110,140,.12)}
+  .queue-head{display:flex;align-items:baseline;justify-content:space-between;gap:12px}
+  .queue-head h2{
+    margin:0;font-family:var(--serif);font-size:18px;font-weight:600;letter-spacing:.01em;
+  }
+  .queue-count{font-size:12.5px;color:var(--ink-2);font-variant-numeric:tabular-nums;flex:none}
+  .queue-help{margin:3px 0 10px;font-size:12.5px;line-height:1.5;color:var(--ink-3)}
+  .photo-list{list-style:none;margin:0;padding:0;border-top:1px solid var(--rule)}
+  .photo-item{
+    display:flex;align-items:center;gap:6px;
+    padding:8px 0;border-bottom:1px solid var(--rule);
+  }
+  .photo-item:last-child{border-bottom:0}
+  .photo-item.dragging{opacity:.4}
+  .photo-item:focus-within{background:#FAFCFB}
+  .drag-handle{
+    flex:none;width:28px;height:44px;
+    display:grid;place-items:center;
+    border:0;background:transparent;border-radius:2px;
+    color:var(--ink-3);cursor:grab;touch-action:none;
+  }
+  .drag-handle:active,body.is-dragging .drag-handle{cursor:grabbing}
+  .drag-handle:hover{color:var(--ink-2)}
+  .drag-handle svg{width:12px;height:18px}
+  .photo-thumb{
+    flex:none;width:54px;height:54px;object-fit:cover;
+    background:#F1F4F0;border:1px solid var(--rule);
+  }
+  .photo-info{min-width:0;flex:1}
+  .photo-name{
+    margin:0;font-size:14px;font-weight:600;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  }
+  .photo-detail{
+    margin:1px 0 0;font-size:12px;color:var(--ink-2);
+    font-variant-numeric:tabular-nums;
+  }
+  .photo-actions{flex:none;display:flex;align-items:center;gap:1px}
+  .photo-actions button{
+    width:34px;height:44px;border:0;border-radius:2px;background:transparent;
+    color:var(--ink-2);font-size:15px;line-height:1;
+  }
+  .photo-actions button:hover:not(:disabled){background:#F1F4F0;color:var(--ink)}
+  .photo-actions button:disabled{color:var(--rule);cursor:not-allowed}
+  .photo-actions .remove-photo{color:var(--ink-3);font-size:19px}
+  .photo-actions .remove-photo:hover:not(:disabled){background:#FDF3F7;color:var(--magenta)}
+  body.is-dragging{user-select:none;-webkit-user-select:none}
+  .recap dd.wrap{
+    white-space:normal;overflow:visible;justify-self:stretch;
+    text-align:left;line-height:1.5;
+  }
+  @media (max-width:400px){
+    .drag-handle{width:24px}
+    .photo-thumb{width:48px;height:48px}
+    .photo-actions button{width:32px;font-size:14px}
+  }
+
+  /* ---------- 照片预览（看样） ---------- */
+  .photo-thumb-btn{
+    flex:none;padding:0;border:0;border-radius:2px;
+    background:transparent;line-height:0;cursor:zoom-in;
+  }
+  .preview-btn{
+    display:block;max-width:100%;padding:0;border:0;
+    background:transparent;cursor:zoom-in;
+  }
+  .lightbox{
+    inset:0;margin:0;padding:0;border:0;
+    width:100vw;height:100vh;height:100dvh;
+    max-width:none;max-height:none;
+    background:transparent;color:#fff;
+  }
+  .lightbox[open]{
+    display:grid;grid-template-rows:auto minmax(0,1fr) auto;gap:14px;
+    padding:calc(14px + env(safe-area-inset-top)) 18px calc(14px + env(safe-area-inset-bottom));
+    background:rgba(17,26,28,.94);
+  }
+  .lightbox::backdrop{background:rgba(17,26,28,.94)}
+  .lightbox :focus-visible{outline-color:#7FD4E8}
+  .lightbox:focus,.lightbox:focus-visible{outline:none}
+  .lb-head{display:flex;align-items:center;justify-content:space-between;gap:12px}
+  .lb-name{
+    margin:0;min-width:0;font-size:14px;font-weight:600;color:#fff;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  }
+  .lb-close{
+    flex:none;width:44px;height:44px;margin:-8px -8px -8px 0;
+    border:0;border-radius:3px;background:transparent;
+    color:rgba(255,255,255,.75);font-size:26px;line-height:1;
+  }
+  .lb-close:hover{background:rgba(255,255,255,.12);color:#fff}
+  .lb-stage{display:grid;place-items:center;min-height:0;overflow:hidden}
+  .lb-stage img{
+    display:block;max-width:100%;
+    max-height:calc(100vh - 160px);
+    max-height:calc(100dvh - 160px);
+    background:#fff;border:1px solid rgba(255,255,255,.18);
+    box-shadow:0 18px 50px rgba(0,0,0,.45);
+  }
+  .lb-foot{display:flex;align-items:center;justify-content:center;gap:14px}
+  .lb-nav{
+    min-height:44px;padding:0 18px;flex:none;
+    border:1px solid rgba(255,255,255,.28);border-radius:2px;
+    background:transparent;color:#fff;font-size:14px;
+  }
+  .lb-nav:hover:not(:disabled){border-color:rgba(255,255,255,.55);background:rgba(255,255,255,.1)}
+  .lb-nav:disabled{color:rgba(255,255,255,.3);border-color:rgba(255,255,255,.14);cursor:not-allowed}
+  .lb-count{
+    text-align:center;
+    font-size:13px;color:rgba(255,255,255,.72);font-variant-numeric:tabular-nums;
+  }
+  @media (max-width:400px){
+    .lb-nav{padding:0 12px}
+    .lb-count{font-size:12.5px}
+  }
+
+  .file-err{
+    max-width:560px;margin:10px auto 0;
+    font-size:13.5px;color:var(--magenta);
+  }
+
+  /* ---------- 打印设置 ---------- */
+  .panel{margin:26px 0 0}
+  @media (min-width:900px){ .layout.split .panel{margin-top:0} }
+  .panel h2{
+    margin:0 0 2px;
+    font-family:var(--serif);font-size:19px;font-weight:600;letter-spacing:.01em;
+  }
+  .rows{margin-top:6px}
+  .row{
+    display:flex;align-items:center;justify-content:space-between;gap:14px;
+    min-height:56px;padding:7px 0;
+    border-top:1px solid var(--rule);
+  }
+  .row-label{font-size:14px;color:var(--ink-2);flex:none}
+
+  .field{display:flex;align-items:center;gap:8px;margin-left:auto;min-width:0}
+  .field select{
+    appearance:none;-webkit-appearance:none;
+    border:0;background:transparent;
+    font:inherit;font-size:16px;color:var(--ink);
+    text-align:right;text-align-last:right;
+    padding:8px 2px;max-width:100%;
+    border-radius:2px;
+  }
+  .field::after{
+    content:"";width:6px;height:6px;flex:none;margin-top:-3px;
+    border-right:1.5px solid var(--ink-3);border-bottom:1.5px solid var(--ink-3);
+    transform:rotate(45deg);pointer-events:none;
+  }
+  .range-input{
+    width:148px;border:0;border-bottom:1px solid var(--rule);
+    background:transparent;padding:6px 0;border-radius:0;
+    font:inherit;font-size:16px;text-align:right;color:var(--ink);
+  }
+  .range-input::placeholder{color:var(--ink-3)}
+  .range-input:focus{border-bottom-color:var(--cyan);outline:none}
+
+  /* 份数步进 */
+  .stepper{
+    display:flex;align-items:center;
+    border:1px solid var(--rule);border-radius:3px;overflow:hidden;background:var(--paper);
+  }
+  .stepper button{
+    width:42px;height:42px;border:0;background:transparent;
+    font-size:19px;line-height:1;color:var(--ink);
+    display:grid;place-items:center;
+  }
+  .stepper button:hover:not(:disabled){background:#F1F4F0}
+  .stepper button:disabled{color:#B9C2BA;cursor:not-allowed}
+  .stepper input{
+    width:38px;height:42px;border:0;background:transparent;
+    text-align:center;font:inherit;font-size:16px;font-variant-numeric:tabular-nums;
+    color:var(--ink);padding:0;
+  }
+  .stepper input:focus{outline:none}
+
+  .hint{margin:0;padding:0 0 12px;font-size:12.5px;line-height:1.5;color:var(--ink-2)}
+  .err{margin:0;padding:0 0 10px;font-size:12.5px;color:var(--magenta)}
+
+  /* 术语说明 */
+  .glossary{margin-top:18px;border-top:1px solid var(--rule)}
+  .glossary summary{
+    list-style:none;cursor:pointer;
+    display:flex;align-items:center;justify-content:space-between;gap:10px;
+    min-height:52px;font-size:14px;color:var(--ink-2);
+  }
+  .glossary summary::-webkit-details-marker{display:none}
+  .glossary summary::after{
+    content:"";width:6px;height:6px;flex:none;
+    border-right:1.5px solid var(--ink-3);border-bottom:1.5px solid var(--ink-3);
+    transform:rotate(45deg);transition:transform .18s ease;margin-right:4px;
+  }
+  .glossary[open] summary::after{transform:rotate(-135deg)}
+  .glossary-body{padding:0 0 16px}
+  .glossary dl{margin:0;font-size:13.5px;line-height:1.6}
+  .glossary dl > div{padding:8px 0;border-top:1px solid #EDF0EC}
+  .glossary dl > div:first-child{border-top:0;padding-top:0}
+  .glossary dt{font-weight:600;font-size:13.5px;color:var(--ink)}
+  .glossary dd{margin:1px 0 0;color:var(--ink-2)}
+  .glossary .note{margin:12px 0 0;font-size:12.5px;color:var(--ink-3)}
+  .flip{width:100%;max-width:340px;height:auto;display:block;margin:14px auto 0;color:var(--ink-2)}
+  .flip .sheetline{stroke:var(--rule);fill:none;stroke-width:1}
+  .flip .fold{stroke:var(--ink-3);stroke-width:1;stroke-dasharray:3 3;fill:none}
+  .flip .arrow{stroke:var(--ink-2);stroke-width:1.4;fill:none}
+  .flip text{font-size:11px;fill:var(--ink-2);font-family:var(--sans)}
+
+  /* ---------- 底部工单栏 ---------- */
+  .dock{
+    position:fixed;left:0;right:0;bottom:0;z-index:20;
+    background:var(--paper);
+    border-top:1px solid var(--rule);
+    box-shadow:0 -6px 18px rgba(17,26,28,.06);
+    padding:10px 16px calc(10px + env(safe-area-inset-bottom));
+    transition:opacity .15s ease;
+  }
+  /* 弹层打开时收起底栏，避免和遮罩抢层级；同时锁住背后的滚动 */
+  body.modal-open .dock{opacity:0;pointer-events:none}
+  body.modal-open{overflow:hidden}
+  .dock-inner{
+    max-width:1040px;margin:0 auto;
+    display:flex;align-items:center;gap:14px;
+  }
+  .ticket{min-width:0;flex:1}
+  .ticket-main{
+    margin:0;font-size:14px;font-weight:600;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  }
+  .ticket-sub{
+    margin:1px 0 0;font-size:12.5px;color:var(--ink-2);
+    font-variant-numeric:tabular-nums;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  }
+  .primary{
+    flex:none;
+    min-height:48px;padding:0 28px;
+    border:0;border-radius:2px;
+    background:var(--cyan);color:#fff;
+    font-size:16px;font-weight:600;letter-spacing:.04em;
+    transition:background-color .15s ease;
+  }
+  .primary:hover:not(:disabled){background:var(--cyan-deep)}
+  .primary:active:not(:disabled){background:#06495E}
+  .primary:disabled{background:#A9B6B4;cursor:not-allowed}
+
+  /* ---------- 确认弹层 ---------- */
+  .dlg{
+    border:1px solid var(--rule);border-radius:4px;
+    padding:0;background:var(--paper);color:var(--ink);
+    width:min(440px,calc(100vw - 40px));
+    box-shadow:0 20px 50px rgba(17,26,28,.22);
+  }
+  .dlg::backdrop{background:rgba(17,26,28,.5)}
+  .dlg-view{padding:24px 22px}
+  .dlg h2{
+    margin:0;font-family:var(--serif);font-size:19px;font-weight:600;
+  }
+  .recap{
+    display:grid;grid-template-columns:auto minmax(0,1fr);gap:9px 16px;
+    margin:16px 0 0;font-size:14px;
+  }
+  .recap dt{color:var(--ink-2)}
+  .recap dd{
+    margin:0;justify-self:end;text-align:right;
+    font-variant-numeric:tabular-nums;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%;
+  }
+  .dlg-note{margin:14px 0 0;font-size:12.5px;line-height:1.55;color:var(--ink-2)}
+  .dlg-actions{display:flex;gap:10px;margin-top:20px}
+  .dlg-actions .ghost{flex:1;min-height:46px}
+  .dlg-actions .primary{flex:2.2;min-height:46px;font-size:15px}
+
+  .dlg-msg{margin:12px 0 0;font-family:var(--serif);font-size:17px;font-weight:600;text-align:center}
+  #viewSending,#viewDone{text-align:center}
+  .spinner{
+    width:26px;height:26px;margin:10px auto 0;
+    border:2px solid var(--rule);border-top-color:var(--cyan);border-radius:50%;
+    animation:spin .8s linear infinite;
+  }
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .check{width:40px;height:40px;margin-top:6px;color:var(--green)}
+
+  @media (max-width:639px){
+    .dlg{
+      width:100%;max-width:none;
+      position:fixed;inset:auto 0 0 0;margin:0;
+      border-radius:6px 6px 0 0;border-bottom:0;
+      box-shadow:0 -12px 40px rgba(17,26,28,.18);
+    }
+    .dlg-view{padding:22px 20px calc(20px + env(safe-area-inset-bottom))}
+    .dlg[open]{animation:rise .2s ease-out}
+    @keyframes rise{from{transform:translateY(14px);opacity:.6}to{transform:none;opacity:1}}
+  }
+
+  @media (prefers-reduced-motion:reduce){
+    *,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important}
+  }
+</style>
+</head>
+<body>
+
+<main class="app">
+
+  <header class="masthead">
+    <svg class="regmark" viewBox="0 0 34 34" aria-hidden="true">
+      <circle cx="10.5" cy="10.5" r="6" fill="#0B9AC0"/>
+      <circle cx="23.5" cy="10.5" r="6" fill="#D4187A"/>
+      <circle cx="10.5" cy="23.5" r="6" fill="#F0C200"/>
+      <circle cx="23.5" cy="23.5" r="6" fill="#111A1C"/>
+    </svg>
+    <div>
+      <h1>家庭打印</h1>
+      <p class="printer"><span class="led" aria-hidden="true"></span>佳能 · 就绪 <span class="ip">192.168.50.24</span></p>
+    </div>
+  </header>
+
+  <div class="layout" id="layout">
+
+    <!-- 左列：上传 / 文件预览 -->
+    <div>
+      <div class="stage" id="stage">
+        <input class="sr-only" type="file" id="file" accept="image/*,application/pdf" multiple>
+
+        <label class="paper empty" id="empty" for="file">
+          <span class="crop tl"></span><span class="crop tr"></span>
+          <span class="crop bl"></span><span class="crop br"></span>
+
+          <svg class="sheet-icon" viewBox="0 0 44 52" fill="none" stroke="currentColor"
+               stroke-width="1.2" stroke-linejoin="round" stroke-linecap="round" aria-hidden="true">
+            <path d="M4 1h24l12 12v38H4z"/>
+            <path d="M28 1v12h12"/>
+            <path d="M22 24v14M15 31h14"/>
+          </svg>
+
+          <span class="empty-title">把文件放到这里</span>
+          <p class="empty-sub">照片可多选，或放一个 PDF；每个文件最大 20 MB</p>
+          <span class="sheet-cta">选择文件</span>
+          <p class="sheet-note">文件不会离开家里的网络。</p>
+        </label>
+
+        <div class="paper filled" id="filled" hidden>
+          <span class="crop tl"></span><span class="crop tr"></span>
+          <span class="crop bl"></span><span class="crop br"></span>
+
+          <div id="photoQueue" hidden>
+            <div class="queue-head">
+              <h2>打印顺序</h2>
+              <span class="queue-count" id="photoCount"></span>
+            </div>
+            <p class="queue-help">拖住左侧手柄调整顺序，点照片可以放大查看。</p>
+            <ol class="photo-list" id="photoList" aria-label="照片打印顺序"></ol>
+          </div>
+
+          <div class="preview" id="preview"></div>
+
+          <div class="filemeta" id="filemeta">
+            <p class="fname" id="fname"></p>
+            <p class="fsub" id="fsub"></p>
+          </div>
+
+          <div class="fileacts">
+            <button type="button" class="ghost" id="replaceBtn">更换文件</button>
+            <button type="button" class="ghost danger" id="removeBtn">移除</button>
+          </div>
+        </div>
+      </div>
+
+      <p class="file-err" id="fileErr" role="alert" hidden></p>
+      <p class="sr-only" id="queueStatus" role="status" aria-live="polite"></p>
+    </div>
+
+    <!-- 右列：打印设置 -->
+    <section class="panel" id="panel" hidden aria-labelledby="panelTitle">
+      <h2 id="panelTitle">打印设置</h2>
+
+      <div class="rows">
+        <div class="row">
+          <label class="row-label" for="size">尺寸</label>
+          <div class="field">
+            <select id="size">
+              <option value="A4" data-short="A4">A4（210 × 297 mm）</option>
+              <option value="A5" data-short="A5">A5（148 × 210 mm）</option>
+              <option value="B5" data-short="B5">B5（176 × 250 mm）</option>
+              <option value="Letter" data-short="Letter">Letter（216 × 279 mm）</option>
+              <option value="10×15 照片" data-short="10×15">10 × 15 cm 照片纸</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="row" id="rangeRow" hidden>
+          <label class="row-label" for="rangeMode">打印范围</label>
+          <div class="field">
+            <select id="rangeMode">
+              <option value="all">全部页面</option>
+              <option value="custom">指定页码</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="row" id="pageRow" hidden>
+          <label class="row-label" for="rangeText">页码</label>
+          <div class="field">
+            <input type="text" class="range-input" id="rangeText" placeholder="1-3, 5" autocomplete="off" spellcheck="false">
+          </div>
+        </div>
+        <p class="err" id="rangeErr" hidden></p>
+
+        <div class="row">
+          <label class="row-label" for="copies">份数</label>
+          <div class="field">
+            <div class="stepper">
+              <button type="button" id="minus" aria-label="减少份数">−</button>
+              <input type="text" inputmode="numeric" id="copies" value="1" readonly aria-label="份数">
+              <button type="button" id="plus" aria-label="增加份数">＋</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="row">
+          <label class="row-label" for="color">色彩</label>
+          <div class="field">
+            <select id="color">
+              <option value="color" data-short="彩色">彩色</option>
+              <option value="mono" data-short="单色">单色（只用黑墨）</option>
+            </select>
+          </div>
+        </div>
+        <p class="hint" id="colorHint">照片和彩色图表选彩色；文字稿选单色更省墨。</p>
+
+        <div class="row">
+          <label class="row-label" for="duplex">双面</label>
+          <div class="field">
+            <select id="duplex">
+              <option value="single" data-short="单面">单面</option>
+              <option value="long" data-short="双面·长边">双面 · 长边翻转</option>
+              <option value="short" data-short="双面·短边">双面 · 短边翻转</option>
+            </select>
+          </div>
+        </div>
+        <p class="hint" id="duplexHint">每张纸只印一面，用纸最多。</p>
+
+        <details class="glossary">
+          <summary>长边、短边是什么意思</summary>
+          <div class="glossary-body">
+            <dl>
+              <div>
+                <dt>单面</dt>
+                <dd>每张纸只印一面，背面空着。</dd>
+              </div>
+              <div>
+                <dt>双面 · 长边翻转</dt>
+                <dd>沿纸张的长边翻面，像翻书一样左右翻开。适合报告、合同、讲义。</dd>
+              </div>
+              <div>
+                <dt>双面 · 短边翻转</dt>
+                <dd>沿纸张的短边翻面，像翻日历一样上下翻开。适合便签、清单。</dd>
+              </div>
+            </dl>
+            <p class="note">长边指这张纸较长的那条边（A4 是 297 mm 那条）。双面打印由打印机自动翻纸，你不用手动放纸。</p>
+
+            <svg class="flip" viewBox="0 0 320 158" role="img"
+                 aria-label="长边翻转时页面左右翻动，短边翻转时页面上下翻动">
+              <defs>
+                <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5"
+                        markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                  <path d="M0 0 L10 5 L0 10 z" fill="currentColor"/>
+                </marker>
+              </defs>
+
+              <g>
+                <rect class="sheetline" x="30" y="38" width="64" height="88" rx="1"/>
+                <line class="fold" x1="62" y1="38" x2="62" y2="126"/>
+                <path class="arrow" d="M40 27 Q62 9 84 27" marker-end="url(#ah)"/>
+                <text x="62" y="150" text-anchor="middle">长边翻转 · 左右翻</text>
+              </g>
+
+              <g>
+                <rect class="sheetline" x="206" y="38" width="64" height="88" rx="1"/>
+                <line class="fold" x1="206" y1="82" x2="270" y2="82"/>
+                <path class="arrow" d="M198 48 Q182 82 198 116" marker-end="url(#ah)"/>
+                <text x="238" y="150" text-anchor="middle">短边翻转 · 上下翻</text>
+              </g>
+            </svg>
+          </div>
+        </details>
+      </div>
+    </section>
+
+  </div>
+</main>
+
+<!-- 底部：打印工单 + 主操作 -->
+<div class="dock" id="dock" hidden>
+  <div class="dock-inner">
+    <div class="ticket">
+      <p class="ticket-main" id="ticketMain">A4 · 彩色 · 1 份</p>
+      <p class="ticket-sub" id="ticketSub">1 页 · 1 张纸</p>
+    </div>
+    <button class="primary" id="printBtn" disabled>打印</button>
+  </div>
+</div>
+
+<dialog class="dlg" id="dlg" aria-labelledby="dlgTitle">
+  <div class="dlg-view" id="viewConfirm">
+    <h2 id="dlgTitle">确认打印</h2>
+    <dl class="recap" id="recap"></dl>
+    <p class="dlg-note" id="dlgNote">发送到 192.168.50.24 后马上开始打印，请到打印机取纸。</p>
+    <div class="dlg-actions">
+      <button type="button" class="ghost" id="cancelBtn">取消</button>
+      <button type="button" class="primary" id="confirmBtn">确认打印</button>
+    </div>
+  </div>
+
+  <div class="dlg-view" id="viewSending" hidden>
+    <div class="spinner" aria-hidden="true"></div>
+    <p class="dlg-msg" role="status">正在发送到打印机…</p>
+  </div>
+
+  <div class="dlg-view" id="viewDone" hidden>
+    <svg class="check" viewBox="0 0 40 40" fill="none" stroke="currentColor"
+         stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <circle cx="20" cy="20" r="18" stroke-opacity=".35"/>
+      <path d="M12 20.5l5.5 5.5L28 15"/>
+    </svg>
+    <p class="dlg-msg" role="status">已发送到打印机</p>
+    <p class="dlg-note">打印很快完成，到打印机取走纸张即可。</p>
+    <div class="dlg-actions">
+      <button type="button" class="primary" id="doneBtn">完成</button>
+    </div>
+  </div>
+</dialog>
+
+<!-- 看样：点缩略图或单张大图打开 -->
+<dialog class="lightbox" id="lightbox" tabindex="-1" aria-labelledby="lbName">
+  <div class="lb-head">
+    <p class="lb-name" id="lbName"></p>
+    <button type="button" class="lb-close" id="lbClose" aria-label="关闭预览">×</button>
+  </div>
+  <div class="lb-stage" id="lbStage"><img id="lbImg" alt=""></div>
+  <div class="lb-foot" id="lbFoot">
+    <button type="button" class="lb-nav" id="lbPrev">上一张</button>
+    <span class="lb-count" id="lbCount" aria-live="polite"></span>
+    <button type="button" class="lb-nav" id="lbNext">下一张</button>
+  </div>
+</dialog>
+
+<script>
+  const $ = (s) => document.querySelector(s);
+
+  const MAX_MB = 20;
+  // 原型说明：真实部署时由服务端解析 PDF 页数，这里是演示值
+  const DEMO_PDF_PAGES = 3;
+
+  const fileInput = $('#file');
+  const stage = $('#stage');
+  const emptyState = $('#empty');
+  const filled = $('#filled');
+  const preview = $('#preview');
+  const photoQueue = $('#photoQueue');
+  const photoList = $('#photoList');
+  const photoCount = $('#photoCount');
+  const queueStatus = $('#queueStatus');
+  const lightbox = $('#lightbox');
+  const lbName = $('#lbName');
+  const lbImg = $('#lbImg');
+  const lbStage = $('#lbStage');
+  const lbFoot = $('#lbFoot');
+  const lbCount = $('#lbCount');
+  const lbPrev = $('#lbPrev');
+  const lbNext = $('#lbNext');
+  const lbClose = $('#lbClose');
+  const filemeta = $('#filemeta');
+  const replaceBtn = $('#replaceBtn');
+  const removeBtn = $('#removeBtn');
+  const fname = $('#fname');
+  const fsub = $('#fsub');
+  const fileErr = $('#fileErr');
+  const layout = $('#layout');
+  const panel = $('#panel');
+  const sizeSel = $('#size');
+  const rangeRow = $('#rangeRow');
+  const rangeMode = $('#rangeMode');
+  const pageRow = $('#pageRow');
+  const rangeText = $('#rangeText');
+  const rangeErr = $('#rangeErr');
+  const copiesInput = $('#copies');
+  const minusBtn = $('#minus');
+  const plusBtn = $('#plus');
+  const colorSel = $('#color');
+  const colorHint = $('#colorHint');
+  const duplexSel = $('#duplex');
+  const duplexHint = $('#duplexHint');
+  const dock = $('#dock');
+  const ticketMain = $('#ticketMain');
+  const ticketSub = $('#ticketSub');
+  const printBtn = $('#printBtn');
+  const dlg = $('#dlg');
+  const recap = $('#recap');
+  const dlgNote = $('#dlgNote');
+  const viewConfirm = $('#viewConfirm');
+  const viewSending = $('#viewSending');
+  const viewDone = $('#viewDone');
+
+  // 打印队列：照片各占一页，按列表顺序打印；PDF 独占一项
+  // 每项：{ id, file, isPdf, pages, url }
+  let items = [];
+  let nextId = 1;
+  let copies = 1;
+  let rangePages = null;   // PDF 指定页码的解析结果，null 表示无效
+  let sending = false;
+  let dragState = null;    // 正在拖动的照片项
+  let lbIndex = 0;         // 预览中的照片在队列里的下标
+  let lbReturnFocus = null; // 关闭预览后要还回焦点的元素
+
+  const isPdfFile = (f) => f.type === 'application/pdf' || /\.pdf$/i.test(f.name);
+  const pdfItem = () => items.find((it) => it.isPdf) || null;
+  const photoItems = () => items.filter((it) => !it.isPdf);
+  const totalBytes = () => items.reduce((n, it) => n + it.file.size, 0);
+
+  function announce(msg) {
+    queueStatus.textContent = '';
+    queueStatus.textContent = msg;
+  }
+
+  function releaseUrl(it) {
+    if (it && it.url) URL.revokeObjectURL(it.url);
+  }
+
+  const fmtSize = (b) =>
+    b < 1024 ? b + ' B'
+    : b < 1048576 ? Math.round(b / 1024) + ' KB'
+    : (b / 1048576).toFixed(1) + ' MB';
+
+  const optShort = (sel) => {
+    const o = sel.selectedOptions[0];
+    return o && o.dataset.short ? o.dataset.short : sel.value;
+  };
+
+  const setFileError = (msg) => {
+    fileErr.textContent = msg;
+    fileErr.hidden = !msg;
+  };
+
+  /* ---------- 文件载入 ---------- */
+
+  function addFiles(fileList) {
+    const files = Array.from(fileList || []);
+    if (!files.length) return;
+
+    const errs = [];
+    const images = [];
+    const pdfs = [];
+
+    for (const f of files) {
+      if (f.size > MAX_MB * 1048576) {
+        errs.push(`${f.name} ${fmtSize(f.size)}，超过 ${MAX_MB} MB。`);
+      } else if (isPdfFile(f)) {
+        pdfs.push(f);
+      } else if (f.type.startsWith('image/')) {
+        images.push(f);
+      } else {
+        errs.push(`${f.name} 不是图片或 PDF。`);
+      }
+    }
+
+    if (pdfs.length) {
+      // PDF 和照片不能混在一单里，否则页码范围说不清
+      if (images.length || pdfs.length > 1 || photoItems().length) {
+        setFileError('PDF 一次只能放一个；照片可以一次选多张。');
+        return;
+      }
+      items.forEach(releaseUrl);
+      items = [];
+      addItem(pdfs[0], true);
+      setFileError(errs.join(' '));
+      render();
+      return;
+    }
+
+    if (pdfItem()) {
+      setFileError('先移除 PDF，再添加照片。');
+      return;
+    }
+
+    images.forEach((f) => addItem(f, false));
+    if (images.length) render();
+    setFileError(errs.join(' '));
+  }
+
+  // 追加一个文件到队列；图片生成对象 URL 供预览
+  function addItem(file, isPdf) {
+    items.push({
+      id: nextId++,
+      file,
+      isPdf,
+      pages: isPdf ? DEMO_PDF_PAGES : 1,
+      url: isPdf ? null : URL.createObjectURL(file)
+    });
+  }
+
+  // 重建照片清单；序号与上下移动按钮状态随数组顺序更新
+  function renderQueue() {
+    photoList.innerHTML = '';
+    photoCount.textContent = `${items.length} 张 · ${fmtSize(totalBytes())}`;
+
+    items.forEach((it, i) => {
+      const li = document.createElement('li');
+      li.className = 'photo-item';
+      li.dataset.id = it.id;
+      li.innerHTML =
+        `<button type="button" class="drag-handle" aria-label="拖动调整第 ${i + 1} 张的位置，也可以按上下方向键">` +
+          '<svg viewBox="0 0 12 18" fill="currentColor" aria-hidden="true">' +
+            '<circle cx="3.5" cy="3" r="1.3"/><circle cx="8.5" cy="3" r="1.3"/>' +
+            '<circle cx="3.5" cy="9" r="1.3"/><circle cx="8.5" cy="9" r="1.3"/>' +
+            '<circle cx="3.5" cy="15" r="1.3"/><circle cx="8.5" cy="15" r="1.3"/>' +
+          '</svg>' +
+        '</button>' +
+        `<button type="button" class="photo-thumb-btn" data-act="preview" aria-label="放大预览第 ${i + 1} 张：${escapeHtml(it.file.name)}">` +
+          `<img class="photo-thumb" src="${it.url}" alt="" draggable="false">` +
+        '</button>' +
+        '<div class="photo-info">' +
+          `<p class="photo-name" title="${escapeHtml(it.file.name)}">${escapeHtml(it.file.name)}</p>` +
+          `<p class="photo-detail">第 ${i + 1} 张 · ${fmtSize(it.file.size)}</p>` +
+        '</div>' +
+        '<div class="photo-actions">' +
+          `<button type="button" data-act="up" aria-label="上移第 ${i + 1} 张"${i === 0 ? ' disabled' : ''}>↑</button>` +
+          `<button type="button" data-act="down" aria-label="下移第 ${i + 1} 张"${i === items.length - 1 ? ' disabled' : ''}>↓</button>` +
+          '<button type="button" class="remove-photo" data-act="remove" aria-label="移除这张">×</button>' +
+        '</div>';
+      photoList.appendChild(li);
+    });
+  }
+
+  function render() {
+    const has = items.length > 0;
+    const pdf = pdfItem();
+    const photos = photoItems();
+
+    emptyState.hidden = has;
+    filled.hidden = !has;
+    panel.hidden = !has;
+    dock.hidden = !has;
+    layout.classList.toggle('split', has);
+    document.body.classList.toggle('has-dock', has);
+
+    if (!has) {
+      photoQueue.hidden = true;
+      photoList.innerHTML = '';
+      preview.innerHTML = '';
+      filemeta.hidden = true;
+      syncRangeRow();
+      update();
+      return;
+    }
+
+    // 两张以上照片才需要排序；单张直接看大图
+    const multi = photos.length > 1;
+    photoQueue.hidden = !multi;
+    preview.hidden = multi;
+    filemeta.hidden = multi;
+    preview.innerHTML = '';
+
+    if (multi) {
+      renderQueue();
+      replaceBtn.textContent = '添加照片';
+    } else if (pdf) {
+      const ph = document.createElement('div');
+      ph.className = 'docph';
+      ph.innerHTML = '<svg viewBox="0 0 34 40" fill="none" stroke="currentColor" stroke-width="1.2" aria-hidden="true">' +
+        '<path d="M3 1h19l9 9v29H3z"/><path d="M22 1v9h9"/><path d="M9 24h16M9 30h11"/></svg>';
+      const label = document.createElement('span');
+      label.textContent = 'PDF 文档 · 共 ' + pdf.pages + ' 页';
+      ph.appendChild(label);
+      preview.appendChild(ph);
+
+      fname.textContent = pdf.file.name;
+      fsub.textContent = `PDF · ${pdf.pages} 页 · ${fmtSize(pdf.file.size)}`;
+      replaceBtn.textContent = '更换文件';
+    } else {
+      const it = photos[0];
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'preview-btn';
+      btn.dataset.act = 'preview';
+      btn.setAttribute('aria-label', `放大预览 ${it.file.name}`);
+      const img = new Image();
+      img.src = it.url;
+      img.alt = '待打印照片预览';
+      btn.appendChild(img);
+      preview.appendChild(btn);
+
+      fname.textContent = it.file.name;
+      fsub.textContent = `照片 · ${fmtSize(it.file.size)}`;
+      replaceBtn.textContent = '添加照片';
+    }
+
+    syncRangeRow();
+    update();
+  }
+
+  function syncRangeRow() {
+    const pdf = pdfItem();
+    const multi = !!pdf && pdf.pages > 1;
+    rangeRow.hidden = !multi;
+    if (!multi) {
+      rangeMode.value = 'all';
+      pageRow.hidden = true;
+      rangeErr.hidden = true;
+      rangePages = null;
+    } else {
+      pageRow.hidden = rangeMode.value !== 'custom';
+      validateRange();
+    }
+  }
+
+  function reset() {
+    items.forEach(releaseUrl);
+    items = [];
+    rangePages = null;
+    dragState = null;
+    document.body.classList.remove('is-dragging');
+    rangeMode.value = 'all';
+    rangeText.value = '';
+    fileInput.value = '';
+    setFileError('');
+    setCopies(1);
+    render();
+  }
+
+  function clearAll() {
+    if (items.length > 1 && !confirm(`移除全部 ${items.length} 张照片？`)) return;
+    reset();
+    announce('已清空打印队列');
+  }
+
+  // 移除单张；焦点落到相邻手柄，键盘操作不会丢失位置
+  function removeItem(id) {
+    const index = items.findIndex((it) => it.id === id);
+    if (index < 0) return;
+    const [gone] = items.splice(index, 1);
+    releaseUrl(gone);
+    render();
+    const handles = photoList.querySelectorAll('.drag-handle');
+    if (handles.length) handles[Math.min(index, handles.length - 1)].focus();
+    announce(gone.isPdf ? '已移除 PDF' : `已移除第 ${index + 1} 张`);
+  }
+
+  // 按数组下标换位，供方向键与上下按钮共用
+  function movePhoto(from, to, keepFocus) {
+    if (from === to || to < 0 || to >= items.length) return;
+    const [moved] = items.splice(from, 1);
+    items.splice(to, 0, moved);
+    renderQueue();
+    update();
+    if (keepFocus) {
+      const next = photoList.querySelector(`[data-id="${moved.id}"] .drag-handle`);
+      if (next) next.focus();
+    }
+    announce(`第 ${from + 1} 张移到第 ${to + 1} 张，共 ${items.length} 张`);
+  }
+
+  /* ---------- 页码解析：支持 1-3, 5 ---------- */
+
+  function parseRange(text, total) {
+    const parts = text.split(/[,，、\s]+/).filter(Boolean);
+    if (!parts.length) return null;
+    const set = new Set();
+
+    for (const part of parts) {
+      const m = part.match(/^(\d+)\s*[-–~至]\s*(\d+)$/);
+      if (m) {
+        let a = Number(m[1]);
+        let b = Number(m[2]);
+        if (a > b) [a, b] = [b, a];
+        if (a < 1 || b > total) return null;
+        for (let i = a; i <= b; i++) set.add(i);
+      } else if (/^\d+$/.test(part)) {
+        const n = Number(part);
+        if (n < 1 || n > total) return null;
+        set.add(n);
+      } else {
+        return null;
+      }
+    }
+    return [...set].sort((a, b) => a - b);
+  }
+
+  function validateRange() {
+    if (rangeRow.hidden) return;
+    if (rangeMode.value !== 'custom') {
+      pageRow.hidden = true;
+      rangeErr.hidden = true;
+      rangePages = null;
+      return;
+    }
+    pageRow.hidden = false;
+    const pdf = pdfItem();
+    const total = pdf ? pdf.pages : 0;
+    const text = rangeText.value.trim();
+    if (!text) {
+      rangePages = null;
+      rangeErr.textContent = '填写页码，例如 1-3, 5';
+      rangeErr.hidden = false;
+      return;
+    }
+    const parsed = parseRange(text, total);
+    if (!parsed) {
+      rangePages = null;
+      rangeErr.textContent = `这个页码不对，共 ${total} 页，试试 1-3, 5 的写法`;
+      rangeErr.hidden = false;
+      return;
+    }
+    rangePages = parsed;
+    rangeErr.hidden = true;
+  }
+
+  /* ---------- 计算与工单 ---------- */
+
+  function selectedPages() {
+    if (!items.length) return null;
+    const pdf = pdfItem();
+    // 照片一张一页，顺序即打印顺序
+    if (!pdf) return items.map((_, i) => i + 1);
+    if (pdf.pages <= 1) return [1];
+    if (rangeMode.value === 'all') {
+      return Array.from({ length: pdf.pages }, (_, i) => i + 1);
+    }
+    return rangePages;
+  }
+
+  function jobData() {
+    const pages = selectedPages();
+    const valid = !!pages && pages.length > 0;
+    const duplex = duplexSel.value;
+    const perCopy = valid ? pages.length : 0;
+    const faces = perCopy * copies;
+    // 双面时两张纸印 4 面，奇数面最后一张背面留白
+    const sheets = !valid ? 0 : duplex === 'single' ? faces : Math.ceil(perCopy / 2) * copies;
+    return { pages, valid, copies, duplex, perCopy, faces, sheets, color: colorSel.value, size: sizeSel.value };
+  }
+
+  function update() {
+    const j = jobData();
+
+    duplexHint.textContent = {
+      single: '每张纸只印一面，背面空着。',
+      long: '沿长边翻转，像翻书一样左右翻开。',
+      short: '沿短边翻转，像翻日历一样上下翻开。'
+    }[j.duplex];
+
+    colorHint.textContent = j.color === 'mono'
+      ? '只用黑色墨水，省彩色墨，速度也更快。'
+      : '照片和彩色图表选彩色；文字稿选单色更省墨。';
+
+    if (!items.length) return;
+
+    ticketMain.textContent = `${j.size} · ${optShort(colorSel)} · ${j.copies} 份`;
+    let sub;
+    if (!j.valid) sub = '等待页码';
+    else if (pdfItem()) sub = `${j.perCopy} 页 · ${j.sheets} 张纸`;
+    else sub = `${items.length} 张照片 · ${j.sheets} 张纸`;
+    if (j.valid && j.duplex !== 'single') sub += ` · ${optShort(duplexSel)}`;
+    ticketSub.textContent = sub;
+
+    printBtn.disabled = !j.valid;
+  }
+
+  function setCopies(n) {
+    copies = Math.min(99, Math.max(1, n));
+    copiesInput.value = copies;
+    minusBtn.disabled = copies <= 1;
+    plusBtn.disabled = copies >= 99;
+    update();
+  }
+
+  /* ---------- 确认打印 ---------- */
+
+  function buildRecap() {
+    const j = jobData();
+    const pdf = pdfItem();
+    const rows = [];
+
+    if (pdf) {
+      rows.push(['文件', pdf.file.name]);
+      if (pdf.pages > 1) {
+        rows.push(['范围', rangeMode.value === 'all'
+          ? `全部 ${pdf.pages} 页`
+          : `第 ${rangeText.value.trim()} 页`]);
+      } else {
+        rows.push(['范围', '第 1 页']);
+      }
+    } else {
+      // 照片一单一图一页，顺序就是清单顺序
+      rows.push(['文件', `${items.length} 张照片`]);
+      const order = items.map((it, i) => `${i + 1}. ${it.file.name}`);
+      rows.push(['顺序', order.length > 4
+        ? `${order.slice(0, 4).join('、')}，等共 ${items.length} 张`
+        : order.join('、')]);
+    }
+
+    rows.push(
+      ['尺寸', optShort(sizeSel)],
+      ['份数', `${j.copies} 份`],
+      ['色彩', optShort(colorSel)],
+      ['双面', optShort(duplexSel)],
+      ['用纸', `约 ${j.sheets} 张`]
+    );
+
+    recap.innerHTML = rows
+      .map(([k, v]) => `<dt>${k}</dt><dd${k === '顺序' ? ' class="wrap"' : ''}>${escapeHtml(String(v))}</dd>`)
+      .join('');
+
+    const odd = j.duplex !== 'single' && j.perCopy % 2 === 1;
+    dlgNote.textContent = odd
+      ? `共 ${j.perCopy} 页，双面打印时最后一张纸的背面会留白。发送后请到打印机取纸。`
+      : `发送到 192.168.50.24 后马上开始打印，请到打印机取纸。`;
+  }
+
+  function escapeHtml(s) {
+    return s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  }
+
+  function showConfirm() {
+    if (printBtn.disabled) return;
+    buildRecap();
+    viewConfirm.hidden = false;
+    viewSending.hidden = true;
+    viewDone.hidden = true;
+    document.body.classList.add('modal-open');
+    dlg.showModal();
+  }
+
+  /* ---------- 事件绑定 ---------- */
+
+  fileInput.addEventListener('change', (e) => {
+    addFiles(e.target.files);
+    e.target.value = '';
+  });
+
+  ['dragenter', 'dragover'].forEach((t) =>
+    stage.addEventListener(t, (e) => {
+      e.preventDefault();
+      stage.classList.add('dragover');
+    })
+  );
+  ['dragleave', 'drop'].forEach((t) =>
+    stage.addEventListener(t, (e) => {
+      e.preventDefault();
+      // 指针从子元素移出也会触发 dragleave，用相关目标排除
+      if (t === 'dragleave' && e.relatedTarget && stage.contains(e.relatedTarget)) return;
+      stage.classList.remove('dragover');
+    })
+  );
+  stage.addEventListener('drop', (e) => {
+    const files = e.dataTransfer && e.dataTransfer.files;
+    if (files && files.length) addFiles(files);
+  });
+
+  replaceBtn.addEventListener('click', () => fileInput.click());
+  removeBtn.addEventListener('click', clearAll);
+
+  /* ---------- 照片排序：拖动、方向键、上下按钮 ---------- */
+
+  photoList.addEventListener('click', (e) => {
+    const btn = e.target.closest('button[data-act]');
+    if (!btn) return;
+    const li = btn.closest('.photo-item');
+    const index = items.findIndex((it) => it.id === Number(li.dataset.id));
+    if (index < 0) return;
+    const act = btn.dataset.act;
+    if (act === 'preview') openLightbox(Number(li.dataset.id), btn);
+    else if (act === 'up') movePhoto(index, index - 1, true);
+    else if (act === 'down') movePhoto(index, index + 1, true);
+    else if (act === 'remove') removeItem(items[index].id);
+  });
+
+  // 手柄获得焦点后可用 ↑ ↓ Home End 调整顺序
+  photoList.addEventListener('keydown', (e) => {
+    const handle = e.target.closest('.drag-handle');
+    if (!handle) return;
+    const li = handle.closest('.photo-item');
+    const index = items.findIndex((it) => it.id === Number(li.dataset.id));
+    if (index < 0) return;
+
+    let to = -1;
+    if (e.key === 'ArrowUp') to = Math.max(0, index - 1);
+    else if (e.key === 'ArrowDown') to = Math.min(items.length - 1, index + 1);
+    else if (e.key === 'Home') to = 0;
+    else if (e.key === 'End') to = items.length - 1;
+    else return;
+
+    e.preventDefault();
+    if (to !== index) movePhoto(index, to, true);
+  });
+
+  photoList.addEventListener('pointerdown', (e) => {
+    const handle = e.target.closest('.drag-handle');
+    if (!handle || (e.pointerType === 'mouse' && e.button !== 0)) return;
+    const li = handle.closest('.photo-item');
+    if (!li) return;
+
+    // 捕获指针后，手指/鼠标移出列表也能继续收到 move 事件
+    try {
+      handle.setPointerCapture(e.pointerId);
+    } catch (_) {
+      /* 合成事件或不支持捕获时忽略，排序仍可依靠方向键 */
+    }
+    dragState = {
+      id: Number(li.dataset.id),
+      el: li,
+      pointerId: e.pointerId,
+      startY: e.clientY,
+      started: false
+    };
+  });
+
+  photoList.addEventListener('pointermove', (e) => {
+    const d = dragState;
+    if (!d || e.pointerId !== d.pointerId) return;
+
+    // 超过 5px 才算拖动，避免点按手柄时误换位
+    if (!d.started) {
+      if (Math.abs(e.clientY - d.startY) < 5) return;
+      d.started = true;
+      d.el.classList.add('dragging');
+      document.body.classList.add('is-dragging');
+    }
+    e.preventDefault();
+
+    // 逐行比较中线：指针越过哪一行的中线，就插到那一行之前
+    const rows = Array.from(photoList.children).filter((el) => el !== d.el);
+    const before = rows.find((el) => {
+      const r = el.getBoundingClientRect();
+      return e.clientY < r.top + r.height / 2;
+    });
+    photoList.insertBefore(d.el, before || null);
+
+    // 清单比屏幕长时，靠近上下边缘自动滚动
+    const edge = 80;
+    if (e.clientY < edge) window.scrollBy(0, -12);
+    else if (e.clientY > window.innerHeight - edge) window.scrollBy(0, 12);
+  });
+
+  // 拖动结束：以 DOM 顺序为准回写数组，并重建序号与按钮状态
+  function endPointerDrag(e) {
+    const d = dragState;
+    if (!d) return;
+    if (e.pointerId !== undefined && e.pointerId !== d.pointerId) return;
+    dragState = null;
+    document.body.classList.remove('is-dragging');
+    d.el.classList.remove('dragging');
+    if (!d.started) return;
+
+    const order = Array.from(photoList.children).map((el) => Number(el.dataset.id));
+    const from = items.findIndex((it) => it.id === d.id);
+    items.sort((a, b) => order.indexOf(a.id) - order.indexOf(b.id));
+    const to = items.findIndex((it) => it.id === d.id);
+
+    renderQueue();
+    update();
+    if (from !== to) announce(`第 ${from + 1} 张移到第 ${to + 1} 张，共 ${items.length} 张`);
+  }
+
+  ['pointerup', 'pointercancel'].forEach((t) =>
+    photoList.addEventListener(t, endPointerDrag)
+  );
+  // 指针捕获失败（旧浏览器）时，松手落在列表外也能收尾
+  ['pointerup', 'pointercancel'].forEach((t) =>
+    window.addEventListener(t, endPointerDrag)
+  );
+
+  /* ---------- 照片预览：缩略图、单张大图都可打开 ---------- */
+
+  preview.addEventListener('click', (e) => {
+    const btn = e.target.closest('button[data-act="preview"]');
+    if (!btn) return;
+    const photos = photoItems();
+    if (photos.length) openLightbox(photos[0].id, btn);
+  });
+
+  // 按队列顺序打开，预览里的上一张/下一张与打印顺序一致
+  function openLightbox(id, opener) {
+    const photos = photoItems();
+    const index = photos.findIndex((it) => it.id === id);
+    if (index < 0) return;
+    lbIndex = index;
+    // Safari 点击按钮不移动焦点，记录打开元素本身，关闭时才能还回去
+    lbReturnFocus = opener || document.activeElement;
+    renderLightbox();
+    document.body.classList.add('modal-open');
+    lightbox.showModal();
+    lightbox.focus();
+  }
+
+  function renderLightbox() {
+    const photos = photoItems();
+    const it = photos[lbIndex];
+    if (!it) return;
+    lbImg.src = it.url;
+    lbImg.alt = `第 ${lbIndex + 1} 张照片：${it.file.name}`;
+    lbName.textContent = it.file.name;
+    lbCount.textContent = `第 ${lbIndex + 1} 张 / 共 ${photos.length} 张`;
+    lbFoot.hidden = photos.length < 2;
+    lbPrev.disabled = lbIndex === 0;
+    lbNext.disabled = lbIndex === photos.length - 1;
+  }
+
+  function stepLightbox(delta) {
+    const photos = photoItems();
+    const next = lbIndex + delta;
+    if (next < 0 || next >= photos.length) return;
+    lbIndex = next;
+    renderLightbox();
+  }
+
+  lbClose.addEventListener('click', () => lightbox.close());
+  lbPrev.addEventListener('click', () => stepLightbox(-1));
+  lbNext.addEventListener('click', () => stepLightbox(1));
+
+  lightbox.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowLeft') {
+      e.preventDefault();
+      stepLightbox(-1);
+    } else if (e.key === 'ArrowRight') {
+      e.preventDefault();
+      stepLightbox(1);
+    }
+  });
+
+  // 点图片外的暗场关闭；点图片本身不关闭
+  [lightbox, lbStage].forEach((el) =>
+    el.addEventListener('click', (e) => {
+      if (e.target === el) lightbox.close();
+    })
+  );
+
+  lightbox.addEventListener('close', () => {
+    document.body.classList.remove('modal-open');
+    if (lbReturnFocus && lbReturnFocus.isConnected) lbReturnFocus.focus();
+    lbReturnFocus = null;
+  });
+
+  sizeSel.addEventListener('change', update);
+  colorSel.addEventListener('change', update);
+  duplexSel.addEventListener('change', update);
+
+  rangeMode.addEventListener('change', () => {
+    validateRange();
+    update();
+  });
+  rangeText.addEventListener('input', () => {
+    validateRange();
+    update();
+  });
+
+  minusBtn.addEventListener('click', () => setCopies(copies - 1));
+  plusBtn.addEventListener('click', () => setCopies(copies + 1));
+
+  printBtn.addEventListener('click', showConfirm);
+  $('#cancelBtn').addEventListener('click', () => dlg.close());
+
+  $('#confirmBtn').addEventListener('click', () => {
+    sending = true;
+    viewConfirm.hidden = true;
+    viewSending.hidden = false;
+    setTimeout(() => {
+      sending = false;
+      viewSending.hidden = true;
+      viewDone.hidden = false;
+    }, 1100);
+  });
+
+  $('#doneBtn').addEventListener('click', () => {
+    dlg.close();
+    reset();
+  });
+
+  dlg.addEventListener('cancel', (e) => {
+    if (sending) e.preventDefault();
+  });
+
+  dlg.addEventListener('close', () => {
+    document.body.classList.remove('modal-open');
+    if (sending) return;
+    viewConfirm.hidden = false;
+    viewSending.hidden = true;
+    viewDone.hidden = true;
+  });
+
+  // 初始状态
+  setCopies(1);
+</script>
+</body>
+</html>
