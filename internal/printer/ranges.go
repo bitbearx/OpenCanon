@@ -81,3 +81,26 @@ func NormalizeRanges(input string, max int) (string, int, error) {
 	}
 	return strings.Join(parts, ","), count, nil
 }
+
+// PageNumbers 将 NormalizeRanges 的规范结果展开为逐页渲染顺序。
+func PageNumbers(normalized string) []int {
+	var pages []int
+	for _, part := range strings.Split(normalized, ",") {
+		bounds := strings.SplitN(part, "-", 2)
+		first, err := strconv.Atoi(bounds[0])
+		if err != nil || first < 1 {
+			return nil
+		}
+		last := first
+		if len(bounds) == 2 {
+			last, err = strconv.Atoi(bounds[1])
+			if err != nil || last < first {
+				return nil
+			}
+		}
+		for page := first; page <= last; page++ {
+			pages = append(pages, page)
+		}
+	}
+	return pages
+}

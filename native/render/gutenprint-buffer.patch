@@ -1,0 +1,21 @@
+From: OpenCanon contributors
+Date: 2026-11-04
+Subject: Allocate a complete NULL sentinel for buffered image row pointers
+License: GPL-2.0-or-later
+
+Gutenprint 5.3.4 Debian orig source, corresponding to package
+5.3.4.20220624T01008808d602-1. The cleanup loop reads height + 1
+pointers, so adding one byte per row does not reserve a sentinel for
+short images. Keep all original pixels and fix the allocation itself.
+
+--- a/src/main/buffer-image.c
++++ b/src/main/buffer-image.c
+@@ -74,7 +74,7 @@
+ 	int i;
+ 	/* fill buffer */
+ 	if(!priv->buf){
+-		priv->buf = stp_zalloc((sizeof(unsigned short*) + 1) * height);
++		priv->buf = stp_zalloc(sizeof(*priv->buf) * ((size_t)height + 1));
+ 		if(!priv->buf){
+ 			return STP_IMAGE_STATUS_ABORT;
+ 		}

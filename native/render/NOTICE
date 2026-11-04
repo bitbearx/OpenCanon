@@ -1,0 +1,176 @@
+OpenCanon 独立 Gutenprint 辅助程序
+
+范围与许可
+
+native/render/opencanon-render.c、本目录构建脚本、补丁及测试按
+GPL-2.0-or-later 提供，Copyright (C) 2026 OpenCanon contributors。
+许可全文见 COPYING。辅助程序静态链接修补后的 libgutenprint；
+Gutenprint 同样采用 GPL-2.0-or-later，
+并非 LGPL。本声明没有重许可 Go 主程序；进程间调用不构成对所有可能
+分发组合的法律结论。分发者须满足实际组合及所选 GPL 版本的要求。
+
+本客户端代码独立编写；API 生命周期和参数依据以下上游接口及示例：
+https://github.com/echiu64/gutenprint/blob/master/include/gutenprint/image.h
+https://github.com/echiu64/gutenprint/blob/master/include/gutenprint/printers.h
+https://github.com/echiu64/gutenprint/blob/master/include/gutenprint/vars.h
+https://github.com/echiu64/gutenprint/blob/master/src/testpattern/testpattern.c
+https://github.com/echiu64/gutenprint/blob/master/src/main/generic-options.c
+https://github.com/echiu64/gutenprint/blob/master/src/main/print-canon.c
+https://github.com/echiu64/gutenprint/blob/master/src/main/canon-media.h
+https://github.com/echiu64/gutenprint/blob/master/src/xml/papers/standard.xml
+
+上述接口、驱动和示例的上游版权包含 Michael Sweet、Robert Krawitz、
+Andy Thaller、Sascha Sommer 等；准确年份及完整权利人以对应上游文件
+及完整上游归档为准。本目录补丁保留原始版权声明；构建安装同时
+保留 Gutenprint-COPYING、Gutenprint-AUTHORS 和完整对应上游源包。
+
+分发二进制或容器时，应随附本目录源码、Makefile、构建脚本、补丁、
+COPYING、NOTICE，并保留其他依赖软件的版权与许可文件。构建脚本
+将完整原始 Gutenprint 源包和这些构建材料安装到
+GUTENPRINT_PREFIX/share/doc/opencanon-render；静态二进制分发必须
+一并携带该目录，为所含 Gutenprint 提供可重建的完整对应源码。
+Poppler 等额外软件的对应源码义务仍由整个发行物的发布者负责。
+单独的上游链接不替代实际的 GPL 对应源码交付。
+
+精确型号与设备流
+
+唯一允许的型号是 bjc-E560-series，内部型号 12000560；无别名回退。
+上游 src/xml/printers/canon.xml 标注 EXPERIMENTAL：
+https://github.com/echiu64/gutenprint/blob/master/src/xml/printers/canon.xml
+E560 自有模式表与双面能力：
+https://github.com/echiu64/gutenprint/blob/master/src/main/canon-printers.h
+https://github.com/echiu64/gutenprint/blob/master/src/main/canon-modes.h
+
+每个任务使用 JobMode=Job，start_job 一次，PageNumber 从零连续递增，
+每页 stp_print，最后 end_job 一次。stdout 是 libgutenprint 生成的
+Canon XML/ESC/压缩栅格设备数据；不是 PDF、PPM 或占位输出。辅助程序
+不连接打印机，不依赖 CUPS daemon、filter、backend、libcups 或 macOS。
+任何非零退出码都表示整个输出不可提交，调用方必须删除部分输出。
+Gutenprint 支持存在不等于本机已验证出纸、颜色精度或背面方向。
+
+介质映射
+
+用户 ID          Gutenprint PageSize                 真实毫米宽×高
+A4               A4                                  210×297
+A5               A5                                  148×210
+JIS-B5           B5                                  182×257
+Letter           Letter                              215.9×279.4
+Legal            Legal                               215.9×355.6
+4x6              w288h432                            101.6×152.4
+5x7              w360h504                            127×177.8
+8x10             c8x10                               203.2×254
+L                w252 + h360J（连接为单一名称）        89×127
+Postcard         w283 + h420（连接为单一名称）         100×148
+DoublePostcard   w420 + h567（连接为单一名称）         200×148
+Env10            COM10                               104.8×241.3
+EnvDL            DL                                  110×220
+EnvYou4          Custom                              105×235
+EnvYou6          Custom                              98×190
+
+对所有纸张同时设置真实毫米转换的 page_width/page_height，避免沿用
+Gutenprint 标准 XML 内经过取整的尺寸。DoublePostcard 保持公开配置的
+200×148 方向；洋形信封使用实际 Custom 能力，不冒充其他信封。
+纸张类型 plain/photo/postcard/envelope 分别映射 Plain/PhotoPlusGloss2/
+Hagaki/Envelope；photo 特指 Photo Paper Plus Glossy II。
+所有枚举都通过 stp_describe_parameter 查询安装库后校验。
+
+关闭 FullBleed，无边距不可选；InputSlot=Front；Quality=Standard。
+彩色使用 RGB 输入及 PrintingMode=Color；单色先灰度化 RGB，再请求
+PrintingMode=BW，照片介质可能由驱动使用复合彩墨表现灰度。
+横向原稿根据可打印区域比例自动顺时针旋转，等比例居中，不裁切拉伸。
+旋转以 64×64 小块落盘；逐页打开、读取及关闭文件，不随总页数增加
+同时打开的文件数。多份复用原始 PPM，各输出页按需转置。
+
+双面仅允许 A4/Letter 普通纸；long/short 分别映射 DuplexNoTumble/
+DuplexTumble。即使仅一页也保留双面模式。逐份输出所有已选页；每份
+奇数页双面任务末尾编码一个真正的空白背面，防止下一份起于背面。
+
+依赖、构建和无设备验收（由集成者执行）
+
+Debian bookworm 构建包：build-essential pkg-config curl ca-certificates
+xz-utils patch flex gettext；原生回归另需 python3。
+运行时无需系统 libgutenprint9/libgutenprint-common；必须保留构建时
+指定前缀下的模型数据。Go 的 PDF 路径仍需 poppler-utils。
+
+  make -C native/render
+  native/render/opencanon-render --check
+  make -C native/render test
+
+默认 GUTENPRINT_PREFIX=/opt/opencanon/gutenprint；非 root 本机安装可用：
+
+  make -C native/render GUTENPRINT_PREFIX="$PWD/bin/gutenprint"
+
+GUTENPRINT_PREFIX 必须为绝对路径，编译进库的数据搜索路径依赖该位置。
+Docker 应 COPY helper 和整个 /opt/opencanon/gutenprint 前缀到运行镜像。
+默认 GUTENPRINT_BUILD 是本目录 .gutenprint-build，可覆盖为绝对临时路径。
+GUTENPRINT_JOBS 控制上游编译并发，默认2。
+
+--check 必须成功报告 bjc-E560-series model=12000560 support=EXPERIMENTAL。
+Go Renderer.Check 还实际运行受限 pdftoppm -v，检查动态库或执行问题。
+
+生成小型真实 P6 彩色输入（Python 仅用于这条验收命令，不是运行依赖）：
+
+  python3 -c 'from pathlib import Path; Path("/tmp/canon-test.ppm").write_bytes(b"P6\n3 2\n255\n" + bytes([255,0,0,0,255,0,0,0,255,255,255,255,0,0,0,127,127,127]))'
+
+渲染到文件，无需打印机：
+
+  native/render/opencanon-render --render --media A4 --media-type plain --color color --duplex long --copies 2 --width-mm 210 --height-mm 297 -- /tmp/canon-test.ppm > /tmp/canon-test.prn
+
+该命令输出一个作业、两份原稿、四个输出面（每份一个空白背面）。
+仅在进程成功且文件非空时使用该流。再分别检查 color/mono、single/
+long/short、多页、多份、横向 PPM、全部纸张及其对应类型、截断 PPM、
+非法参数、输出磁盘满、进程取消与资源上限；尺寸/光栅/设备协议检查
+及实际 E560 出纸均须由集成验收执行，不能仅以文件非空判定正确出纸。
+
+Go 调用 Renderer.Render(ctx, PDF路径, Job, 临时目录) 可验证完整 PDF
+选页→PPM→真实设备流。输入 Pages 须为非空严格递增正整数；越界页
+由 Poppler 报错，生成错误或空栅格也会拒绝。成功文件的生命周期由
+调用方管理；失败删除该任务的栅格目录及部分设备输出。
+
+资源与时限
+
+Go 整单最大 20 分钟，单页 Poppler 最大 90 秒，依赖检查最大 15 秒；
+取消通过 CommandContext 立即结束对应进程。--rasterize 通过 execvp
+替换同一 PID，因此取消不会遗留 Poppler 子进程。
+
+PDF 最大 100 MiB；允许 1..99 份，不另设选定页数、页码或输出面数上限。
+Poppler 使用 300 dpi 与最长边 4200 像素；单个 PPM
+最多 64 MiB，栅格合计最多 1 GiB，设备流最多 1 GiB。helper 设置
+RLIMIT_AS=1 GiB、RLIMIT_FSIZE、RLIMIT_CPU、RLIMIT_NOFILE=256，关闭
+core dump，保留调用环境更严格的限制。错误信息最多保留 8 KiB。
+
+旋转临时文件位于 TMPDIR（Go 传入任务目录），创建后立即 unlink；
+像素仍逐行读取，进程结束自动释放匿名文件。极限任务磁盘占用需为
+原始 PPM（1 GiB）、当前页旋转文件（最多64 MiB）和设备流（1 GiB）预留空间；
+此值不包括输入 PDF。服务部署仍应设置容器整体内存/磁盘限制。
+
+--rasterize 是内部受限命令启动器，参数为 pdftoppm 可执行文件及其
+参数；不经 shell，不提供特权隔离。不要将可执行路径直接暴露给
+不受信任的 HTTP 调用者。
+
+固定源码与已修复的上游内存错误
+
+源码版本：5.3.4.20220624T01008808d602（Debian bookworm 包版本
+5.3.4.20220624T01008808d602-1 的原始上游归档；不叠加 Debian 打包补丁）。
+URL：
+https://deb.debian.org/debian/pool/main/g/gutenprint/gutenprint_5.3.4.20220624T01008808d602.orig.tar.xz
+SHA256：ef514d4ca567b5871cfe7697127bee2c14d5d71d7fbc68d8fee96b0faaed90e7
+校验值来源：同目录 gutenprint_5.3.4.20220624T01008808d602-1.dsc。
+
+OpenCanon 于2026-11-04以 gutenprint-buffer.patch 修正
+src/main/buffer-image.c 的行指针数组分配。原实现分配
+(sizeof(unsigned short*) + 1) * height 字节，释放代码却扫描直到
+NULL 指针哨兵；64位平台1行图像只分配9字节，下一指针需要完整16字节。
+修正为 sizeof(*priv->buf) * ((size_t)height + 1)，保证全部行指针和
+完整零哨兵；未通过扩大图像、复制像素或禁用双面绕开错误。
+
+上游 Canon 长边双面在奇数 PageNumber 上使用该缓冲器，因此1×1
+空白背面可触发非法释放。回归覆盖24×16彩色原稿、3页2份长边双面
+（含两张1×1空白背面）、真实1×1双面输入，以及5×7纸张浮点边界。
+断言包含无stderr错误、唯一StartJob/EndJob、正确数量且交替完整的
+Canon压缩/页ID初始化命令和出纸/关闭压缩命令。
+
+构建参数在 build-gutenprint.sh：启用静态库和静态驱动模块，禁用
+shared、CUPS、GIMP、GUI、NLS、文档、readline、escputil及上游测试工具。
+helper 直接链接指定前缀 lib/libgutenprint.a，不通过 -lgutenprint
+搜索系统库，避免部署时重新加载未修复的系统动态库。

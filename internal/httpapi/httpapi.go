@@ -2,9 +2,11 @@
 package httpapi
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
+	"log"
 	"mime"
 	"net/http"
 	"net/url"
@@ -15,18 +17,32 @@ import (
 	"github.com/bitbearx/opencanon/internal/discovery"
 	"github.com/bitbearx/opencanon/internal/document"
 	"github.com/bitbearx/opencanon/internal/printer"
+	"github.com/bitbearx/opencanon/internal/render"
 	"github.com/bitbearx/opencanon/internal/store"
 	"github.com/bitbearx/opencanon/internal/web"
 )
+
+// PrintBackend 封装设备状态、独立编码提交及接收凭据查询。
+type PrintBackend interface {
+	Available(context.Context) (bool, string)
+	Submit(context.Context, string, string, render.Job) (string, error)
+	JobStatus(context.Context, string) (string, string)
+}
+
+// Scanner 提供设备发现和已确认地址快照。
+type Scanner interface {
+	Snapshot() discovery.State
+	Scan(context.Context) (discovery.State, error)
+}
 
 // Server 持有 HTTP 接口所需的运行时依赖。
 type Server struct {
 	Store        *store.Store
 	Processor    *document.Processor
-	Runner       printer.Runner
+	Printer      PrintBackend
 	Profile      *printer.Profile
 	ProfileError string
-	Discovery    *discovery.Service
+	Discovery    Scanner
 }
 
 // Handler 创建包含静态资源和 API 的处理器。
@@ -85,7 +101,7 @@ func method(w http.ResponseWriter, r *http.Request, want string) bool {
 	return true
 }
 
-// printer 返回经过验证的配置和队列状态。
+// printer 返回独立编码能力和直接查询的设备状态。
 func (s *Server) printer(w http.ResponseWriter, r *http.Request) {
 	if !method(w, r, "GET") {
 		return
@@ -94,16 +110,18 @@ func (s *Server) printer(w http.ResponseWriter, r *http.Request) {
 	if s.Discovery != nil {
 		state = s.Discovery.Snapshot()
 	}
-	result := map[string]any{"name": printer.Queue, "address": state.Address, "discovery": state, "available": false, "stateReason": s.ProfileError, "media": []printer.Media{}, "colorModes": []printer.Mode{}, "duplexModes": []printer.Mode{}, "constraints": []printer.Constraint{}}
+	result := map[string]any{"name": printer.Name, "address": state.Address, "discovery": state, "available": false, "stateReason": s.ProfileError, "media": []printer.Media{}, "colorModes": []printer.Mode{}, "duplexModes": []printer.Mode{}, "constraints": []printer.Constraint{}}
 	if s.Profile != nil {
 		result["media"] = s.Profile.Media
 		result["colorModes"] = s.Profile.ColorModes
 		result["duplexModes"] = s.Profile.DuplexModes
 		result["constraints"] = s.Profile.Constraints
-		if s.Processor.PDFInfo == "" {
+		if s.Processor == nil || s.Processor.PDFInfo == "" {
 			result["stateReason"] = "请安装 pdfinfo 并重启服务。"
+		} else if s.Printer == nil {
+			result["stateReason"] = "独立打印服务尚未配置。"
 		} else {
-			ok, reason := printer.Available(r.Context(), s.Runner)
+			ok, reason := s.Printer.Available(r.Context())
 			result["available"] = ok
 			result["stateReason"] = reason
 		}
@@ -111,7 +129,7 @@ func (s *Server) printer(w http.ResponseWriter, r *http.Request) {
 	respond(w, 200, result)
 }
 
-// scanPrinter 仅允许无参数的同源请求扫描固定队列。
+// scanPrinter 仅允许无参数的同源请求发现配置的设备。
 func (s *Server) scanPrinter(w http.ResponseWriter, r *http.Request) {
 	if !method(w, r, http.MethodPost) {
 		return
@@ -343,20 +361,20 @@ func (s *Server) jobs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if d.State == "uncertain" {
-		fail(w, 503, "submission_uncertain", "无法确认任务是否已提交，请检查系统打印队列，勿重复打印。")
+		fail(w, 503, "submission_uncertain", "无法确认设备是否已接收任务，请检查实际出纸，勿重复打印。")
 		return
 	}
 	if req.Copies < 1 || req.Copies > 99 {
 		fail(w, 422, "invalid_settings", "份数必须为 1 到 99。")
 		return
 	}
-	ranges, pages, err := printer.NormalizeRanges(req.PageRanges, d.PageCount)
+	ranges, _, err := printer.NormalizeRanges(req.PageRanges, d.PageCount)
 	if err != nil {
 		fail(w, 422, "invalid_settings", "页码范围无效。")
 		return
 	}
-	if s.Profile == nil || s.Processor.PDFInfo == "" {
-		fail(w, 503, "printer_unavailable", "打印配置或 PDF 解析程序不可用，请检查服务配置。")
+	if s.Profile == nil || s.Processor == nil || s.Processor.PDFInfo == "" || s.Printer == nil {
+		fail(w, 503, "printer_unavailable", "打印配置或文档工具不可用，请检查服务配置。")
 		return
 	}
 	opts, err := s.Profile.Options(req.MediaID, req.ColorMode, req.Duplex)
@@ -364,20 +382,18 @@ func (s *Server) jobs(w http.ResponseWriter, r *http.Request) {
 		fail(w, 422, "invalid_settings", "打印设置无效或不兼容。")
 		return
 	}
-	_ = printer.Sheets(pages, req.Copies, req.Duplex)
-	if ok, reason := printer.Available(r.Context(), s.Runner); !ok {
-		fail(w, 503, "printer_unavailable", reason)
-		return
-	}
+	opts.Pages = printer.PageNumbers(ranges)
+	opts.Copies = req.Copies
 	d.State = "submitting"
-	id, err := printer.Submit(r.Context(), s.Runner, d.Path, req.Copies, ranges, opts)
+	id, err := s.Printer.Submit(r.Context(), d.Path, d.Name, opts)
 	if err != nil {
+		log.Printf("独立打印提交失败：%v", err)
 		if errors.Is(err, printer.ErrUncertain) {
 			d.State = "uncertain"
-			fail(w, 503, "submission_uncertain", "无法确认任务是否已提交，请检查系统打印队列，勿重复打印。")
+			fail(w, 503, "submission_uncertain", "无法确认设备是否已接收任务，请检查实际出纸，勿重复打印。")
 		} else {
 			d.State = "ready"
-			fail(w, 503, "submission_failed", "提交失败，请检查打印队列后重试。")
+			fail(w, 503, "submission_failed", "打印数据生成或发送失败，请检查设备及服务日志后重试。")
 		}
 		return
 	}
@@ -398,6 +414,10 @@ func (s *Server) job(w http.ResponseWriter, r *http.Request) {
 		fail(w, 404, "not_found", "任务不存在或已过期。")
 		return
 	}
-	state, message := printer.JobStatus(r.Context(), s.Runner, id)
+	if s.Printer == nil {
+		fail(w, 503, "printer_unavailable", "独立打印服务尚未配置。")
+		return
+	}
+	state, message := s.Printer.JobStatus(r.Context(), id)
 	respond(w, 200, map[string]string{"id": id, "state": state, "message": message})
 }

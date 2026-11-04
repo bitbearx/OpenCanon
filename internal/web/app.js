@@ -74,7 +74,7 @@ function setError(message) {
   $('#fileErr').hidden = !message;
 }
 
-// selectedLabel 返回真实驱动选项的展示名。
+// selectedLabel 返回设备能力选项的展示名。
 function selectedLabel(id) {
   return $(id).selectedOptions[0]?.textContent || '暂无可用选项';
 }
@@ -129,8 +129,8 @@ async function checkPrinter(scan = false) {
       profile = await api('/api/printer');
     }
     document.body.classList.toggle('queue-available', !!profile.available);
-    $('#printerState').textContent = profile.available ? '佳能 · 队列可接收' : '佳能 · 暂不可打印';
-    $('#printerReason').textContent = profile.stateReason || (profile.available ? '队列可接收不代表设备在线；实际进度请查看系统打印队列。' : '请检查打印机配置。');
+    $('#printerState').textContent = profile.available ? '佳能 · 设备就绪' : '佳能 · 暂不可打印';
+    $('#printerReason').textContent = profile.stateReason || (profile.available ? '已直接连接打印机；打印结果以实际出纸为准。' : '请检查打印机配置。');
     renderDiscovery(profile.discovery, scanError);
     fillOptions('#size', profile.media, 'A4');
     fillOptions('#color', profile.colorModes, 'mono');
@@ -258,7 +258,7 @@ function buildRecap() {
     const dt = document.createElement('dt'), dd = document.createElement('dd');
     dt.textContent = key; dd.textContent = value; $('#recap').append(dt, dd);
   }
-  $('#dlgNote').textContent = $('#duplex').value !== 'single' && range.count % 2 ? '每份最后一张纸背面留白。任务将提交到系统队列；实际输出请查看打印机。' : '任务将提交到系统队列；实际输出请查看打印机。';
+  $('#dlgNote').textContent = $('#duplex').value !== 'single' && range.count % 2 ? '每份最后一张纸背面留白。任务将直接发送到设备；实际输出请查看打印机。' : '任务将直接发送到设备；实际输出请查看打印机。';
 }
 
 // showView 切换确认、提交和任务反馈。
@@ -281,7 +281,7 @@ function pollJob(id) {
   pollDeadlineTimer = setTimeout(() => {
     if (generation !== pollGeneration) return;
     stopPolling();
-    $('#jobStatus').textContent = `任务 ${id}：已停止自动查询。请在 Mac 系统打印队列查看实际结果。`;
+    $('#jobStatus').textContent = `任务 ${id}：已停止自动查询。请检查打印机面板和实际出纸。`;
   }, 60000);
   // tick 仅允许当前代次更新状态与继续安排查询。
   async function tick() {
@@ -289,11 +289,11 @@ function pollJob(id) {
       const job = await api('/api/print-jobs/' + encodeURIComponent(id), { signal });
       if (generation !== pollGeneration || !$('#dlg').open) return;
       const labels = { waiting: '等待打印', processing: '正在处理', failed: '打印任务失败', unknown: '无法确认最终状态' };
-      $('#jobStatus').textContent = `任务 ${id}：${labels[job.state] || '已提交'}。${job.stateReason || job.message || ''} 请在 Mac 系统打印队列查看实际结果。`;
+      $('#jobStatus').textContent = `任务 ${id}：${labels[job.state] || '已发送'}。${job.stateReason || job.message || ''}`;
       if (['unknown', 'failed'].includes(job.state)) { stopPolling(); return; }
     } catch (error) {
       if (generation !== pollGeneration || signal.aborted) return;
-      $('#jobStatus').textContent = `任务 ${id}：${error.message} 请在 Mac 系统打印队列查看。`;
+      $('#jobStatus').textContent = `任务 ${id}：${error.message} 请检查打印机面板和实际出纸。`;
     }
     if (generation === pollGeneration && $('#dlg').open) pollTimer = setTimeout(tick, 3000);
   }
@@ -308,12 +308,12 @@ async function submitJob() {
     const job = await api('/api/print-jobs', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-OpenCanon-Request': '1' }, body: JSON.stringify(confirmedJob) });
     locked = true;
     showView('viewDone');
-    $('#jobStatus').textContent = `任务 ${job.id} 已提交。请在 Mac 系统打印队列查看实际结果。`;
+    $('#jobStatus').textContent = `任务 ${job.id} 的数据已被设备接收。请检查实际出纸。`;
     pollJob(job.id);
   } catch (error) {
     if (!error.status || /uncertain/i.test(error.code || '')) {
       locked = true;
-      setError('提交结果不明，请先检查 Mac 系统打印队列；此文档已禁止再次提交。');
+      setError('发送结果不明，请先检查打印机和实际出纸；此文档已禁止再次提交。');
     } else {
       if (error.status === 404) { locked = true; setError('文档已过期或服务已重启，请重新上传。'); }
       else setError(error.message);
@@ -322,7 +322,7 @@ async function submitJob() {
   } finally { sending = false; update(); }
 }
 
-// reset 释放浏览器预览，不影响已进入系统队列的任务。
+// reset 释放浏览器预览，不影响设备已接收的任务。
 function reset() {
   if (sending || uploading) return;
   if (objectURL) URL.revokeObjectURL(objectURL);

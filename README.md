@@ -1,111 +1,124 @@
 # OpenCanon 家庭打印
 
-在当前 Mac 上运行的局域网打印网站。上传一个 PDF 或静态 JPEG、PNG、HEIC／HEIF、WebP，选择纸张、页码、份数、色彩和单双面，提交到 Canon E560 的本机 CUPS 队列。无需登录，不包含公网发布。
+局域网内的 Canon E560 打印服务。Go 直接使用 BJNP 与打印机通信，Poppler 和 Gutenprint 负责生成 E560 设备数据。运行时不需要 macOS、Canon 专有驱动或 CUPS 服务；支持 Linux ARM64，Go 主程序不使用 cgo，独立的 `opencanon-render` 辅助程序链接开源 libgutenprint。
 
-<img src="design/demo.png" alt="OpenCanon 演示" width="640">
+<img src="design/demo.png" alt="OpenCanon 页面设计参考" width="640">
 
-## 本机运行
-
-需要 Go 1.26.1、macOS 的 CUPS／sips、Poppler 的 pdfinfo，以及官方 Canon E560 驱动和 `OpenCanon_E560` 队列。实际映射和依据见 [config/README.md](config/README.md)。不要将通用 PostScript 队列替代该驱动。
-
-```sh
-brew install poppler
-go test ./...
-go build -o bin/opencanon ./cmd/opencanon
-./bin/opencanon -listen 0.0.0.0:8088 \
-  -printer-config config/printer.json \
-  -data-dir "$HOME/Library/Application Support/OpenCanon/data" \
-  -pdfinfo /opt/homebrew/bin/pdfinfo
-```
-
-本机 8080 已被其他服务占用，因此 LaunchAgent 使用 8088；程序的默认监听参数仍为 `0.0.0.0:8080`。当前家庭地址为 `http://192.168.50.14:8088`，IP 变化时以启动日志列出的局域网地址为准。手机须连接相同 Wi-Fi。系统若询问入站网络授权，请在系统窗口允许。
-
-Mac 必须开机并连接家庭网络，休眠时网站不可用。程序不更改睡眠策略、路由器设置或系统默认打印机。不要在不可信网络运行无登录服务，不要配置端口转发或公网隧道。
-
-缺少配置、pdfinfo 或队列时首页仍可访问，但会显示具体原因并禁止打印。调整安装或配置后重启服务，再点击网页“重新扫描”。“队列可接收”仅指本机 CUPS 接受任务，不证明打印机在线。
-
-## 打印机地址发现
-
-页面不再固定显示打印机 IP。首次没有保存记录时，页面自动请求后端扫描；之后显示上次保存的地址及发现时间，点击“重新扫描”会重新发现并保存。扫描期间禁止重复点击和打印确认，已有纸张、色彩、份数等设置保留。多个页面同时打开时共享正在进行的扫描结果。
-
-发现过程从固定 Canon 队列的实际设备 URI 获取 Bonjour 服务名，通过 macOS `dns-sd` 解析主机与局域网 IPv4。仅发现当前已配置的 Canon 网络设备，不进行任意网段探测或自动添加其他型号。实际打印继续使用 Canon Bonjour 设备 URI，IP 变化时无需重建队列。
-
-成功结果以 0600 权限原子保存到 `-data-dir/printer-discovery.json`，包含名称、IP、主机名、设备 URI 和发现时间；服务重启会恢复。该文件独立于会在启动时清理的上传目录。扫描失败保留上次确认记录并显示失败原因；缓存地址和“上次发现”时间不证明设备当前在线。地址冲突或已过期的 DNS 记录不会覆盖保存结果。
-
-已实测真实 Bonjour 扫描、再次扫描更新时间、重启读取及两个页面同时首次打开；扫描相关改动后的完整测试为 32 项通过。本次验证未提交打印任务。
-
+Gutenprint 将精确型号 `bjc-E560-series` 标为 **EXPERIMENTAL**。软件生成设备数据不等于真实 E560 已验证出纸，颜色、翻面和其他纸张必须以实物验收为准。当前没有用其他型号替代 E560，也没有 CUPS 回退。
 
 ## Docker 运行
 
-容器运行网页和文档处理，Mac 继续运行 CUPS、Canon 驱动及固定打印队列。容器通过 IPP 访问 Mac 的 CUPS；Mac 必须保持开机且连接打印机所在网络。Linux 容器使用 ImageMagick 和 img2pdf 转换图片。设备发现模块依赖 macOS 的 `dns-sd` 和本地 CUPS socket，容器内的设备扫描目前不可用；队列状态和打印独立于扫描。
+打印机和服务必须能在局域网互相访问。`.env` 使用打印机地址，不再填写 Mac 的 CUPS 地址：
 
-启动前，需让容器访问 Mac 的 CUPS，并限制接入范围。当前机器使用 OrbStack，实测 Mac 虚拟网卡地址为 `192.168.139.3`，容器连接的来源为 `192.168.139.2`；地址可能随环境变化。本机已完成以下配置并验证容器可以访问队列，其他机器需要管理员自行配置：
+```dotenv
+PRINTER_ADDRESS=192.168.50.24:8611
+OPENCANON_PORT=8088
+```
 
-1. 备份 `/etc/cups/cupsd.conf`，保留原有本机监听和管理策略。增加仅绑定虚拟网卡地址的 `Listen 192.168.139.3:631` 及 `ServerAlias 192.168.139.3`；在已有 `<Location />` 的 `Order allow,deny` 后加入 `Allow 192.168.139.2`。不要改为监听 `*:631`，不要放宽 `/admin` 或管理操作的认证。
-2. 使用 `sudo cupsd -t` 检查配置，确认无误后通过 `sudo launchctl kickstart -k system/org.cups.cupsd` 重启 CUPS。检查系统打印队列仍能正常工作；失败时恢复备份。所有使用同一个 OrbStack 虚拟机的容器可能共享这个来源地址，因此它们也能访问该打印接口，只应运行可信容器。
-3. 验证容器可以访问固定队列；若队列未共享或 CUPS 拒绝远程访问，需要检查队列共享和访问策略。IP 地址改变时需重新核对监听、授权和下面的环境变量；其他 Docker 环境的宿主地址及来源也需要实测，不能照搬。
-
-本机 `.env` 已保存 CUPS 地址及 8088 端口，文件不纳入版本管理。其他机器在仓库目录创建 `.env`，设置 `CUPS_ADDRESS=ipp://<宿主机地址>:631`；可选设置 `OPENCANON_PORT`。
+上述地址是本机上次确认的 E560 地址；如果设备地址改变，更新该配置。部署到其他机器时填写实际地址，也可使用能被容器解析的主机名。BJNP 使用设备上的 UDP/TCP 8611：UDP 用于身份、状态和会话，TCP 用于打印数据。
 
 ```sh
 docker compose up -d --build
-docker compose logs -f
 ```
 
-在 Mac 上访问 `http://localhost:8088`，同一家庭 Wi-Fi 的设备访问 `http://<Mac 的局域网 IP>:8088`。本机已停用旧 LaunchAgent，避免占用端口；切回本机服务时，先停止容器，再执行 `launchctl enable "gui/$(id -u)/local.opencanon"` 并按下文 bootstrap。完成后执行 `docker compose down`；容器重建或服务重启后旧上传失效。不要把网站或 CUPS 暴露到公网或不可信网络。
+访问 `http://<服务所在机器地址>:8088`。手机连接相同局域网。服务没有登录功能，不应配置公网端口转发。
 
-已通过容器提交一份 A4 单面黑白测试页（任务编号 `OpenCanon_E560-10`）；CUPS 返回 completed，报告已处理 1 张纸，实际出纸仍需现场确认。应用现有状态模型对已完成任务返回 unknown。
+本机已将独立版本构建为 `opencanon:local` 并更新 Compose 容器 `opencanon-opencanon-1`。本机访问 `http://localhost:8088`，同一局域网访问 `http://192.168.50.14:8088`；打印机为 `192.168.50.24:8611`。使用 `docker compose ps` 查看状态、`docker compose logs -f opencanon` 查看日志、`docker compose restart opencanon` 重启。重启策略为 `unless-stopped`，需要 Docker／OrbStack 本身已启动。
 
-## 常驻运行
+`PRINTER_ADDRESS` 留空时通过 IPv4 BJNP 广播发现。Docker 桥接网络一般不能把局域网广播传到物理网卡，因此容器部署推荐显式配置设备地址。指定地址时，“重新扫描”直接验证该设备，不依赖广播、Bonjour 或宿主机 CUPS。
 
-[deploy/local.opencanon.plist](deploy/local.opencanon.plist) 使用此 Mac 用户的绝对路径；换用户或安装位置时须同步修改所有路径。构建后将程序、配置和 plist 安装到对应位置：
+仅验证设备身份与状态、不发送打印数据：
 
 ```sh
-install -d -m 700 "$HOME/Library/Application Support/OpenCanon"
-install -m 700 bin/opencanon "$HOME/Library/Application Support/OpenCanon/opencanon"
-install -m 600 config/printer.json "$HOME/Library/Application Support/OpenCanon/printer.json"
-install -d "$HOME/Library/LaunchAgents"
-install -m 600 deploy/local.opencanon.plist "$HOME/Library/LaunchAgents/local.opencanon.plist"
-launchctl bootstrap "gui/$(id -u)" "$HOME/Library/LaunchAgents/local.opencanon.plist"
+docker compose run --rm opencanon \
+  -probe -printer-address=192.168.50.24:8611 \
+  -data-dir=/tmp/opencanon-probe
 ```
 
-已注册服务更新时，先 `launchctl bootout "gui/$(id -u)/local.opencanon"`，替换文件后重新 bootstrap。不要同时启动两个使用相同数据目录的进程：应用启动会清理上次运行遗留的上传目录。
+镜像以非 root 用户运行，将上传数据保存到 `opencanon-data` 卷。容器可直接访问打印机即可，不需要开放宿主机 631 端口、挂载 CUPS socket 或安装 Canon 驱动。
 
-查看服务：`launchctl print "gui/$(id -u)/local.opencanon"`。日志为应用目录中的 `service.log` 和 `service-error.log`。停用服务使用上面的 bootout 命令；重新登录前若不希望再启动，还需移除对应的用户 LaunchAgent plist。此服务不使用 root LaunchDaemon。
+## Linux 本机运行
 
-## 文件与任务
+构建需要 Go 1.26.1、C 编译器和源码构建工具。辅助程序固定 Gutenprint 源码版本并修补极小图像的行指针数组分配错误，再静态链接该库；不使用发行版未修补的动态库。Debian bookworm：
 
-单文件最大 20 MiB，请求体最大 21 MiB；份数 1–99。PDF 真实页数由 pdfinfo 读取，损坏、密码保护或禁止打印的文件会被拒绝。页码支持 `1-3,5`、中文逗号及分隔符周围空白，去重并升序合并，拒绝倒序、空片段和越界。图片仅有第 1 页。HEIC 多张静态图仅取首图；不导入相册，不支持动画、SVG 或 TIFF。
+```sh
+sudo apt-get update
+sudo apt-get install build-essential pkg-config curl ca-certificates xz-utils patch flex gettext \
+  poppler-utils imagemagick img2pdf
+make -C native/render GUTENPRINT_PREFIX="$PWD/bin/gutenprint"
+native/render/opencanon-render --check
+make -C native/render test GUTENPRINT_PREFIX="$PWD/bin/gutenprint"
+go test -race ./...
+go build -o bin/opencanon ./cmd/opencanon
+./bin/opencanon -listen 0.0.0.0:8088 \
+  -printer-config config/printer.json \
+  -printer-address 192.168.50.24:8611 \
+  -renderer ./native/render/opencanon-render \
+  -pdfinfo /usr/bin/pdfinfo -pdftoppm /usr/bin/pdftoppm
+```
 
-上传文件在应用中保留 1 小时，每 5 分钟清理过期文件；重启立即失效，旧页面需重新上传。CUPS 接收任务后立即清理应用副本，系统的 spool 和日志由系统管理。不要将这理解为清除了系统打印记录。
+`--check` 必须确认 `bjc-E560-series model=12000560` 及所需参数存在。缺少编码器、模型数据、Poppler 或可用设备时，页面仍可访问，但保持不可打印。安装或修改依赖后重启服务。
 
-自动双面仅支持 A4／Letter 普通纸。奇数页的最后背面留白，用纸估算逐份计算，例如 3 页 × 2 份双面约 4 张纸。长／短边始终指纸张实际边；竖向长边通常左右翻，短边上下翻，横向相反。灰度不保证只使用黑墨。
+首次构建会下载并校验 Gutenprint 源码。保留 `bin/gutenprint`：辅助程序运行时仍需其中的模型数据，复制可执行文件时必须同时保留该绝对路径下的数据。Docker 构建使用 `/opt/opencanon/gutenprint` 并随镜像携带模型数据、对应源包与补丁。
 
-成功提示为“已提交到打印队列”，不是物理完成。同一 documentId 重复提交返回相同任务 ID；结果不明时禁止再次提交该文档，先查看 Mac 系统打印队列。不要通过重新上传绕过不确定提示，避免重复纸张。任务最多自动查询 60 秒；活动任务消失但无法确认结果时显示 unknown。
+默认数据目录为 `$HOME/.local/share/opencanon`，可用 `-data-dir` 指定。不要同时启动两个使用同一数据目录的进程：服务启动会清除上次运行遗留的上传目录。
 
-## 接口
+macOS 也可自行编译相同 Gutenprint 辅助程序后运行 Go 服务；macOS 图片预处理使用系统 sips，但设备通信和打印编码不使用 Canon macOS 驱动。`deploy/local.opencanon.plist` 保留为这台机器的可选 LaunchAgent 配置，需要先安装独立辅助程序并核对绝对路径，不属于当前 Docker 部署入口。
 
-- `GET /api/printer`：实际 profile、禁止组合、队列可接收状态和 `discovery`；顶层 `address` 来自已保存记录，无记录为空，不触发扫描。
-- `POST /api/printer/scan`：无请求体和查询参数，要求 `X-OpenCanon-Request: 1`；200 返回 `{discovery}`，409 表示扫描正在进行，503 表示发现失败。
-- `POST /api/documents`：multipart 单字段 `file`；201 返回 `{id,name,kind,pageCount,expiresAt,previewUrl}`，不返回文件路径。
-- `GET /api/documents/{id}/preview`：图片 JPEG 预览；PDF 无预览阅读器。
-- `POST /api/print-jobs`：JSON `{documentId,mediaId,pageRanges,copies,colorMode,duplex}`，同时要求 `X-OpenCanon-Request: 1`。纸张 ID 来自能力接口；colorMode 为 color／mono，duplex 为 single／long／short。
-- `GET /api/print-jobs/{id}`：仅查询本进程提交的任务，返回 waiting／processing／failed／unknown。
+## 打印数据与状态
 
-变更请求校验同源 Origin，不开放跨域 CORS。错误体统一为 `{error:{code,message}}`；404 表示未知或过期，413 超限，422 文档／设置无效，503 缺打印前提或提交结果不明。
+1. 上传 PDF 或静态 JPEG、PNG、HEIC／HEIF、WebP；PDF 由 pdfinfo 验证页数与打印权限，图片先转换为 PDF。
+2. 服务校验纸张、页码、份数、颜色和单双面。Poppler 只渲染选定页；Gutenprint 对精确 E560 型号生成 Canon XML、ESC 命令和压缩栅格。
+3. 完整设备流生成成功后，Go 建立 BJNP 会话，检查资源，分块发送并逐帧验证接收数量。编码失败时不会发送半份文档。
+4. 设备确认接收全部数据且会话结束后返回本服务生成的任务 ID。单台设备同一时刻处理一个提交；其他提交遇到忙状态返回失败，不在应用内无限排队。
 
-## 模块
+同一 `documentId` 成功后再次提交返回相同任务 ID，不再次打印。传输中部分接收、ACK 丢失或断连可能意味着设备已接收数据，此时文档进入 `uncertain`，禁止自动重发。只有设备完整确认当前帧接收 **0 字节** 时才按 BJNP 流控等待后重送该帧，等待有固定截止时间。
 
-入口 `cmd/opencanon`；HTTP 与同源保护 `internal/httpapi`；Bonjour 发现及地址持久化 `internal/discovery`；文件识别和转换 `internal/document`；队列映射与提交 `internal/printer`；内存状态及文件生命周期 `internal/store`；嵌入式网页 `internal/web`。`design/index.html` 保留为原型来源，运行网页不再使用演示页数或模拟发送计时器。
+BJNP 接收确认不能证明出纸，设备当前忙也不能归属到某个历史任务。网页展示“设备已接收打印数据”；任务最终状态保持 `unknown`，另用说明文字报告设备忙、空闲、错误或无法连接，不伪造任务级 `processing` 或 `completed`。设备错误可能发生在接收之后，请检查面板和实际纸张；不要通过重新上传绕过不确定提示。页面遇到未知状态停止自动查询，最长查询时间为 60 秒。
 
-## 本机验证记录
+直接发送需要等待渲染和设备接收，确认后请保持页面打开。整单提交最多 25 分钟，渲染最多 20 分钟，单页 Poppler 最多 90 秒；取消或超时会结束相关进程和网络操作。服务没有跨重启的打印任务恢复，重启前应等待发送结束，重启后旧文档和任务查询失效，不能据此判断未出纸。
 
-已运行 `go test ./...`（27 项通过）及构建；真实服务 API 冒烟 23 项通过，包含 5 页 PDF、PNG／JPEG／HEIC 转换与预览、损坏／加密／禁止打印拒绝、413、非法设置及同源保护。另验证静态 WebP 可上传、动画 WebP 拒绝。EXIF 1–8 的 PDF 渲染和 JPEG 预览共 16 项与 ImageIO 基准比较通过，使用生成的带方向样本，未代替真实手机照片的现场验收。
+## 文件、纸张与资源
 
-浏览器已检查 320×640、390×844、1280×900，无横向溢出；验证工单 3 页／份 × 2 份长边双面约 4 张纸、取消后修改、超限保留设置、HEIC 预览、非法组合禁用、60 秒停止查询和重启后重新上传提示。LaunchAgent 已在 gui/501 注册，退出终端所属的验证服务后，局域网地址仍可访问；重启 LaunchAgent 后旧文档返回 404。
+- 上传单文件最大 20 MiB，请求体最大 21 MiB；份数 1–99。损坏、密码保护或禁止打印的 PDF 被拒绝。
+- 页码支持 `1-3,5`、中文逗号及空白，去重并升序；拒绝倒序、空片段和越界。图片只有第 1 页；HEIC 多张静态图仅取首图，不支持动画、SVG 或 TIFF。
+- 支持原有 15 种纸张。介质映射及公开源码依据见 [config/README.md](config/README.md)。照片纸选项对应 Photo Paper Plus Glossy II，不能在普通纸上据此判断照片输出质量。
+- 自动双面仅支持 A4／Letter 普通纸。按份输出完整文档，每份奇数页末尾编码空白背面，避免下一份从背面开始。3 页 × 2 份双面估算 4 张纸。
+- 按比例居中到有边距的可打印区域；横向内容可自动旋转。长／短边指实际纸张边；灰度不保证只使用黑墨。
+- 文档保留 1 小时，每 5 分钟清理；设备接收后立即删除应用副本。设备自身的缓存或日志不由应用清除。
+- 渲染使用文件流和逐行像素读取；单张 PPM 最大 64 MiB，原始栅格合计及设备流分别最大 1 GiB。超限明确失败，不截断内容继续打印。详细资源控制见 [native/render/NOTICE](native/render/NOTICE)。
 
-本机 CUPS 即使设置 LC_ALL=C 仍可能输出中文，localhost:631 也曾无法连接。因此状态查询使用 macOS CUPS 域套接字 `ipp://%2Fprivate%2Fvar%2Frun%2Fcupsd` 的结构化 IPP 属性，不要求设备开放 IPP。提交成功只接受实测的中文或标准英文 lp 完整成功响应；标准错误和仅含任务编号的诊断不算成功。不明结果保持 uncertain，避免自动重印。
+## 设备发现
 
-真实任务已提交到固定队列：`OpenCanon_E560-1`（5 页样本仅 1–3 页，2 份，彩色长边）、`-2`（2 页彩色短边）、`-3`（单页彩色）、`-4`（单页单色）。同文档重复请求返回 `-1`，应用源文件已删除。最后观察到 `-1` 为 processing，CUPS 报告已处理 4 张纸，`-2`／`-3`／`-4` 为 waiting；这不是物理完成证明。另有两个仅用于验证成功响应的 held 任务 `-5`／`-6`，已在输出纸张前取消。
+页面首次没有有效缓存时自动扫描；之后展示上次成功发现的地址与时间，点击“重新扫描”更新。配置了 `-printer-address` 时仅验证指定设备；未配置时通过 BJNP 广播发现并只接受精确 E560 型号。发现多个 E560 时要求管理员明确指定地址，不随机选择。
 
-尚需现场完成：确认实际出纸、正反长／短边方向、奇数页末尾背面留白、彩色／单色和逐份排序；装入对应纸张后验收其他尺寸；断网恢复后确认没有重复打印；同 Wi-Fi 手机实际访问。现有队列中的待处理测试任务保留，不会由网站自动重复提交。
+成功结果以 0600 权限原子保存到数据目录的 `printer-discovery.json`。失败保留上次确认记录并显示原因；缓存不是在线证明。旧的 `canonijnetwork://` 缓存不会当作 BJNP 确认记录使用，需要重新扫描。
+
+## HTTP 接口
+
+- `GET /api/printer`：能力、禁止组合、直接设备可用状态及发现缓存；不触发扫描。
+- `POST /api/printer/scan`：无请求体和查询参数，要求 `X-OpenCanon-Request: 1`；409 表示正在扫描，503 表示失败。
+- `POST /api/documents`：multipart 单字段 `file`；201 返回 `{id,name,kind,pageCount,expiresAt,previewUrl}`，不暴露路径。
+- `GET /api/documents/{id}/preview`：图片 JPEG 预览；PDF 无内置预览器。
+- `POST /api/print-jobs`：JSON `{documentId,mediaId,pageRanges,copies,colorMode,duplex}`，要求 `X-OpenCanon-Request: 1`。颜色 `color/mono`，双面 `single/long/short`；返回 `{id,state:"submitted"}` 仅表示接收完成。
+- `GET /api/print-jobs/{id}`：仅查询本进程提交且未过期的任务，返回 `{id,state,message}`。
+
+变更请求校验同源 Origin，不开放 CORS。错误格式 `{error:{code,message}}`；404 表示未知或过期，413 超限，422 文档或设置无效，503 依赖、设备、编码/传输失败或提交结果不明。`submission_uncertain` 必须按禁止自动重试处理。
+
+## 模块与许可
+
+`cmd/opencanon` 入口；`internal/httpapi` HTTP；`internal/bjnp` Go 设备协议；`internal/discovery` 发现与地址持久化；`internal/render` PDF 渲染调度；`native/render` Gutenprint 辅助程序；`internal/printer` 能力、串行提交与接收凭据；`internal/document` 上传处理；`internal/store` 文档生命周期；`internal/web` 网页。`design/index.html` 保留为设计原文件。
+
+Go BJNP 实现参考公开协议事实，来源固定于 [cups-bjnp](https://github.com/bitwiseworks/cups-bjnp-os2/tree/5f1a04542c5e1a714344563972cd1914b4a19185)。独立 C 辅助程序及 Gutenprint 使用 GPL-2.0-or-later；许可、来源及分发对应源码要求见 [native/render/NOTICE](native/render/NOTICE) 和 [COPYING](native/render/COPYING)。镜像携带辅助程序源码与许可；对外分发镜像还需履行所含第三方软件的对应源码义务。
+
+## 验证边界
+
+本次运行 `go test -race ./...`：97 项通过；最终 Linux ARM64 镜像通过 38 项真实编码组合（15 种纸张各彩色/单色，以及 A4/Letter 两种颜色的长/短边双面）。原生回归覆盖 5×7 照片纸边界、3 页 × 2 份长边双面的 8 面输出、1×1 双面图像；修补库的极小图像用例通过 Valgrind，0 errors。辅助程序的动态依赖仅 libc/libm，不加载系统 Gutenprint 或 libcups。
+
+最终镜像经 HTTP 上传真实 3 页 PDF、彩色长边双面 2 份，BJNP 接收端收到 7,958,566 字节，检查到一个 StartJob/EndJob 及完整 8 面命令；重复提交返回相同凭据，设备全局忙时仍返回任务 `unknown`。最终移动网页完成上传、确认和接收提示，390px 视口无横向溢出。此前还验证了选页、短边双面、图片/照片纸、断线后禁止重印。接收端均为本地 BJNP 模拟设备，记录的是真实编码器生成的 Canon 数据，不代表物理打印成功。
+
+2026-11-04 实机已上线，确认 `192.168.50.24:8611` 为 E560、固件 1.060。发现并修复 XML 状态与 4 字节会话扩展兼容问题。首次 A4 彩色长边双面测试发生零接收流控超时；用户确认仅正面出纸且内容缺失，不能算打印成功。随后分离网络与流控时限，完整回归为 159 项通过；复测前必须取消旧任务并确认设备恢复空闲。实机处理和取消阶段曾返回截断 XML，此时保持不可用，不猜测就绪。
+
+取消与重启后设备一度停在 `canceling` 并返回截断 XML；等待其恢复完整 `idle` 后，已完成第二轮实机测试 `E560-20261104-205503`：两页 A4、彩色、长边双面、1 份，直接 BJNP 提交耗时 61.82 秒，返回 `201 submitted`，随后设备从 `processing` 回到完整 `idle`。用户现场确认一张纸正反面内容完整、四色和文字正常、翻面方向正确。本次验证使用隔离 Linux 实例，没有切换常驻服务；其他纸张、短边双面、单色及多份组合仍需各自的实物验收。
+
+实机验收后已按用户要求更新正式 Compose 服务，保留 `opencanon_opencanon-data` 数据卷。部署验证：容器运行、`unless-stopped` 重启策略、8088 端口映射正常；局域网首页与发现接口返回 200，设备能力接口报告 `available: true`、地址 `192.168.50.24`。

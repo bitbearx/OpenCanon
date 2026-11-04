@@ -17,17 +17,17 @@ func TestNormalizeRanges(t *testing.T) {
 	}
 }
 
-// TestProfileConstraints 验证禁止组合和选项冲突。
+// TestProfileConstraints 验证介质限制与禁止组合不能绕过。
 func TestProfileConstraints(t *testing.T) {
-	p := Profile{Queue: Queue, Media: []Media{{ID: "A4", Label: "A4", WidthMM: 210, HeightMM: 297, Options: map[string]string{"PageSize": "A4"}}}, ColorModes: []Mode{{ID: "color", Label: "彩色", Options: map[string]string{"Mode": "color"}}}, DuplexModes: []Mode{{ID: "single", Label: "单面"}, {ID: "long", Label: "双面", Options: map[string]string{"Mode": "other"}}}, Constraints: []Constraint{{MediaID: "A4", ColorMode: "color", Duplex: "single"}}}
+	p := Profile{Model: "bjc-E560-series", Media: []Media{{ID: "A4", Label: "A4", WidthMM: 210, HeightMM: 297, Type: "plain"}, {ID: "4x6", Label: "照片", WidthMM: 101.6, HeightMM: 152.4, Type: "photo"}}, ColorModes: []Mode{{ID: "color", Label: "彩色"}}, DuplexModes: []Mode{{ID: "single", Label: "单面"}, {ID: "long", Label: "双面"}}, Constraints: []Constraint{{MediaID: "A4", ColorMode: "color", Duplex: "single"}}}
 	if err := p.Validate(); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := p.Options("A4", "color", "single"); err == nil {
 		t.Fatal("禁止组合被接受")
 	}
-	if _, err := p.Options("A4", "color", "long"); err == nil {
-		t.Fatal("冲突选项被接受")
+	if _, err := p.Options("4x6", "color", "long"); err == nil {
+		t.Fatal("照片双面被接受")
 	}
 }
 

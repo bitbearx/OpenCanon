@@ -1,0 +1,5 @@
+.git
+.env
+bin
+native/render/.gutenprint-build
+native/render/opencanon-render

@@ -8,6 +8,9 @@
     <string>-printer-config</string><string>/Users/moli/Library/Application Support/OpenCanon/printer.json</string>
     <string>-data-dir</string><string>/Users/moli/Library/Application Support/OpenCanon/data</string>
     <string>-pdfinfo</string><string>/opt/homebrew/bin/pdfinfo</string>
+    <string>-pdftoppm</string><string>/opt/homebrew/bin/pdftoppm</string>
+    <string>-renderer</string><string>/Users/moli/Library/Application Support/OpenCanon/opencanon-render</string>
+    <string>-printer-address</string><string>192.168.50.24:8611</string>
   </array>
   <key>WorkingDirectory</key><string>/Users/moli/Library/Application Support/OpenCanon</string>
   <key>RunAtLoad</key><true/>

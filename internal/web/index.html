@@ -21,7 +21,7 @@
       </svg>
       <div>
         <h1>家庭打印</h1>
-        <p class="printer"><span class="led" aria-hidden="true"></span><span id="printerState">正在检查打印队列…</span> <span class="ip" id="printerAddress">尚未扫描</span></p>
+        <p class="printer"><span class="led" aria-hidden="true"></span><span id="printerState">正在连接打印机…</span> <span class="ip" id="printerAddress">尚未扫描</span></p>
       </div>
     </div>
 
@@ -60,7 +60,7 @@
           <span class="empty-title">把文件放到这里</span>
           <p class="empty-sub">选择一个 PDF、JPEG、PNG、HEIC／HEIF 或 WebP，最大 20 MiB</p>
           <span class="sheet-cta">选择文件</span>
-          <p class="sheet-note">上传文件保留 1 小时；重启即失效。提交后清理应用副本，系统打印队列另行保留。</p>
+          <p class="sheet-note">上传文件保留 1 小时；重启即失效。设备接收后清理应用副本，请以实际出纸确认结果。</p>
         </label>
 
         <div class="paper filled" id="filled" hidden>
@@ -207,7 +207,7 @@
   <div class="dlg-view" id="viewConfirm">
     <h2 id="dlgTitle">确认打印</h2>
     <dl class="recap" id="recap"></dl>
-    <p class="dlg-note" id="dlgNote">确认后提交到本机打印队列；实际输出请查看打印机。</p>
+    <p class="dlg-note" id="dlgNote">确认后直接发送到打印机；实际输出请查看设备。</p>
     <div class="dlg-actions">
       <button type="button" class="ghost" id="cancelBtn">取消</button>
       <button type="button" class="primary" id="confirmBtn">确认打印</button>
@@ -216,7 +216,7 @@
 
   <div class="dlg-view" id="viewSending" hidden>
     <div class="spinner" aria-hidden="true"></div>
-    <p class="dlg-msg" role="status">正在提交到打印队列…</p>
+    <p class="dlg-msg" role="status">正在生成打印数据并发送到设备，请保持页面打开…</p>
   </div>
 
   <div class="dlg-view" id="viewDone" hidden>
@@ -225,7 +225,7 @@
       <circle cx="20" cy="20" r="18" stroke-opacity=".35"/>
       <path d="M12 20.5l5.5 5.5L28 15"/>
     </svg>
-    <p class="dlg-msg" role="status">已提交到打印队列</p>
+    <p class="dlg-msg" role="status">设备已接收打印数据</p>
     <p class="dlg-note"><span id="jobStatus">正在查询任务状态…</span></p>
     <div class="dlg-actions">
       <button type="button" class="primary" id="doneBtn">完成</button>

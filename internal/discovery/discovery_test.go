@@ -2,129 +2,110 @@ package discovery
 
 import (
 	"context"
-	"fmt"
+	"errors"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 )
 
-// discoveryRunner 模拟队列和 Bonjour 命令的实际输出。
-type discoveryRunner struct {
-	address, uri string
-	calls        int
-	cancel       bool
-	conflict     bool
-	gotName      string
+// detectedState 创建完整的设备身份记录，用于验证持久化而非协议模拟。
+func detectedState(host string) State {
+	now := time.Now().UTC()
+	return State{Name: "Canon E560 series", Address: host, Hostname: host, DeviceURI: "bjnp://" + host + ":8611", DiscoveredAt: &now}
 }
 
-// Run 提供可变的发现结果。
-func (r *discoveryRunner) Run(ctx context.Context, _ time.Duration, command string, args ...string) ([]byte, error) {
-	r.calls++
-	if strings.HasSuffix(command, "ipptool") {
-		return []byte("device-uri (uri) = " + r.uri + "\n"), nil
-	}
-	if args[0] == "-L" {
-		r.gotName = args[1]
-		return []byte("service can be reached at printer.local.:8611 (interface 14)\n"), context.DeadlineExceeded
-	}
-	if r.cancel {
-		<-ctx.Done()
-		return nil, ctx.Err()
-	}
-	result := fmt.Sprintf("12:00:00.000 Add 40000002 14 printer.local. %s 60\n", r.address)
-	if r.conflict {
-		result += "12:00:00.001 Add 40000002 15 printer.local. 10.0.0.9 60\n"
-	}
-	return []byte(result), context.DeadlineExceeded
-}
-
-// TestScanPersistence 验证队列派生、重启恢复、重新发现和失败保留。
+// TestScanPersistence 验证重新扫描更新地址、重启恢复以及失败不覆盖最后确认结果。
 func TestScanPersistence(t *testing.T) {
 	dir := t.TempDir()
-	r := &discoveryRunner{uri: "canonijnetwork://Canon/Office%20A+B?TYPE=" + "_canon-" + "bjnp1._tcp.", address: "192.168.1.7"}
-	s, err := New(dir, r)
+	s, err := New(dir, "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	first, err := s.Scan(context.Background())
-	if err != nil {
+	s.detect = func(context.Context, string) (State, error) { return detectedState("192.168.1.7"), nil }
+	if _, err := s.Scan(context.Background()); err != nil {
 		t.Fatal(err)
-	}
-	if first.Address != r.address || r.gotName != "Office A+B" {
-		t.Fatalf("unexpected result: %+v %q", first, r.gotName)
 	}
 	info, err := os.Stat(filepath.Join(dir, "printer-discovery.json"))
 	if err != nil || info.Mode().Perm() != 0600 {
-		t.Fatalf("file mode: %v %v", info, err)
+		t.Fatalf("file: %v %v", info, err)
 	}
-	restored, err := New(dir, r)
-	if err != nil || restored.Snapshot().Address != first.Address {
-		t.Fatalf("restore: %+v %v", restored, err)
+	restored, err := New(dir, "")
+	if err != nil || restored.Endpoint() != "192.168.1.7:8611" {
+		t.Fatalf("restore: %v", err)
 	}
-	r.address = "192.168.1.8"
-	before := r.calls
-	second, err := restored.Scan(context.Background())
-	if err != nil || second.Address != r.address || r.calls != before+3 {
-		t.Fatalf("rescan: %+v %v", second, err)
+	restored.detect = func(context.Context, string) (State, error) { return detectedState("192.168.1.8"), nil }
+	if _, err := restored.Scan(context.Background()); err != nil {
+		t.Fatal(err)
 	}
-	r.conflict = true
+	restored.detect = func(context.Context, string) (State, error) { return State{}, errors.New("offline") }
 	failed, err := restored.Scan(context.Background())
-	if err == nil || failed.Address != second.Address || failed.LastError == "" {
-		t.Fatalf("conflict: %+v %v", failed, err)
+	if err == nil || failed.Address != "192.168.1.8" || failed.LastError == "" || failed.Scanning {
+		t.Fatalf("failure: %+v %v", failed, err)
 	}
-	r.conflict = false
-	r.uri = "socket://printer.local:9100"
-	failed, err = restored.Scan(context.Background())
-	if err == nil || failed.Address != second.Address {
-		t.Fatalf("unsupported: %+v %v", failed, err)
-	}
-	r.uri = "canonijnetwork://Canon/Office%20A+B?TYPE=" + "_canon-" + "bjnp1._tcp."
-	r.address = ""
-	failed, err = restored.Scan(context.Background())
-	if err == nil || failed.Address != second.Address {
-		t.Fatalf("empty discovery: %+v %v", failed, err)
-	}
-	r.address = "192.168.1.8"
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-	failed, err = restored.Scan(ctx)
-	if err == nil || failed.Address != second.Address {
-		t.Fatalf("cancel: %+v %v", failed, err)
-	}
-	again, err := New(dir, r)
-	if err != nil || again.Snapshot().Address != second.Address {
+	again, err := New(dir, "")
+	if err != nil || again.Endpoint() != "192.168.1.8:8611" {
 		t.Fatalf("saved result changed: %v", err)
 	}
 }
 
-// TestCorruptRecord 验证损坏记录不会暴露地址。
-func TestCorruptRecord(t *testing.T) {
-	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "printer-discovery.json"), []byte(`{"address":"192.168.1.1"}`), 0600); err != nil {
+// TestConcurrentScan 验证扫描互斥，后来的请求不能启动第二次网络发现。
+func TestConcurrentScan(t *testing.T) {
+	s, err := New(t.TempDir(), "")
+	if err != nil {
 		t.Fatal(err)
 	}
-	s, err := New(dir, nil)
-	if err != nil || s.Snapshot().Address != "" || s.Snapshot().LastError == "" {
-		t.Fatalf("corrupt: %v", err)
+	started, release, done := make(chan struct{}), make(chan struct{}), make(chan error, 1)
+	s.detect = func(ctx context.Context, _ string) (State, error) {
+		close(started)
+		select {
+		case <-release:
+			return detectedState("192.168.1.7"), nil
+		case <-ctx.Done():
+			return State{}, ctx.Err()
+		}
+	}
+	go func() { _, err := s.Scan(context.Background()); done <- err }()
+	<-started
+	state, err := s.Scan(context.Background())
+	if !errors.Is(err, ErrScanInProgress) || !state.Scanning {
+		t.Fatalf("concurrent: %+v %v", state, err)
+	}
+	close(release)
+	if err := <-done; err != nil {
+		t.Fatal(err)
 	}
 }
 
-// TestAddressEvents 验证移除事件和不同接口的重复地址。
-func TestAddressEvents(t *testing.T) {
-	out := "t Add 0 1 printer.local. 10.0.0.1 60\nt Add 0 2 printer.local. 10.0.0.1 60\nt Add 0 1 printer.local. 10.0.0.2 60\nt Rmv 0 1 printer.local. 10.0.0.2 0\n"
-	if ip, ok := resolveAddress(out, "printer.local.", 3*time.Second); !ok || ip != "10.0.0.1" {
-		t.Fatalf("address %q %v", ip, ok)
+// TestCancelledScanKeepsRecord 验证取消后的新地址不会写入持久记录。
+func TestCancelledScanKeepsRecord(t *testing.T) {
+	s, err := New(t.TempDir(), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.detect = func(context.Context, string) (State, error) { return detectedState("192.168.1.7"), nil }
+	if _, err := s.Scan(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	s.detect = func(context.Context, string) (State, error) { return detectedState("192.168.1.8"), nil }
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	state, err := s.Scan(ctx)
+	if err == nil || state.Address != "192.168.1.7" {
+		t.Fatalf("cancel: %+v %v", state, err)
 	}
 }
 
-// TestExpiredAddress 验证过期结果不能覆盖上次确认的地址。
-func TestExpiredAddress(t *testing.T) {
-	for _, ttl := range []string{"0", "1", "3"} {
-		out := "12:00:00.000 Add 0 1 printer.local. 10.0.0.1 " + ttl + "\n"
-		if ip, ok := resolveAddress(out, "printer.local.", 3*time.Second); ok {
-			t.Fatalf("expired address accepted: %s (TTL %s)", ip, ttl)
+// TestInvalidRecordAndConfiguredAddress 验证损坏或旧协议记录不会覆盖管理员配置。
+func TestInvalidRecordAndConfiguredAddress(t *testing.T) {
+	for _, raw := range []string{`{"address":"192.168.1.1"}`, `{"name":"Canon E560 series","address":"192.168.1.1","deviceURI":"canonijnetwork://Canon/E560"}`} {
+		dir := t.TempDir()
+		if err := os.WriteFile(filepath.Join(dir, "printer-discovery.json"), []byte(raw), 0600); err != nil {
+			t.Fatal(err)
+		}
+		s, err := New(dir, "192.168.1.9")
+		if err != nil || s.Snapshot().Address != "" || s.Snapshot().LastError == "" || s.Endpoint() != "192.168.1.9:8611" {
+			t.Fatalf("record: %v", err)
 		}
 	}
 }

@@ -12,7 +12,7 @@ services:
       - -printer-config=/app/config/printer.json
       - -data-dir=/var/lib/opencanon
       - -pdfinfo=/usr/bin/pdfinfo
-      - -cups-address=${CUPS_ADDRESS:?Set CUPS_ADDRESS to the Mac CUPS IPP address}
+      - -printer-address=${PRINTER_ADDRESS:-}
 
 volumes:
   opencanon-data:

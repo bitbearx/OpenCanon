@@ -2,45 +2,31 @@ package httpapi
 
 import (
 	"context"
+	"errors"
 	"net/http/httptest"
 	"strings"
 	"sync/atomic"
 	"testing"
-	"time"
 
 	"github.com/bitbearx/opencanon/internal/discovery"
 )
 
-// scanRunner 控制扫描执行以验证接口并发行为。
-type scanRunner struct {
-	calls   atomic.Int32
-	started chan struct{}
-	release chan struct{}
+// scanCounter 记录实际扫描入口调用以验证同源保护和参数拒绝。
+type scanCounter struct{ calls atomic.Int32 }
+
+// Snapshot 读取缓存不会访问设备。
+func (s *scanCounter) Snapshot() discovery.State { return discovery.State{} }
+
+// Scan 模拟设备不可达而不访问真实网络。
+func (s *scanCounter) Scan(context.Context) (discovery.State, error) {
+	s.calls.Add(1)
+	return discovery.State{}, errors.New("offline")
 }
 
-// Run 暂停队列查询直到测试允许继续。
-func (r *scanRunner) Run(ctx context.Context, _ time.Duration, _ string, _ ...string) ([]byte, error) {
-	r.calls.Add(1)
-	select {
-	case r.started <- struct{}{}:
-	default:
-	}
-	select {
-	case <-r.release:
-	case <-ctx.Done():
-		return nil, ctx.Err()
-	}
-	return []byte("device-uri (uri) = socket://unsupported\n"), nil
-}
-
-// TestScanEndpoint 验证 GET 不扫描、来源检查、参数拒绝和并发状态。
+// TestScanEndpoint 验证非法来源、缺失标识和客户端地址注入不会触发设备发现。
 func TestScanEndpoint(t *testing.T) {
-	r := &scanRunner{started: make(chan struct{}, 1), release: make(chan struct{})}
-	d, err := discovery.New(t.TempDir(), r)
-	if err != nil {
-		t.Fatal(err)
-	}
-	handler := (&Server{Discovery: d}).Handler()
+	scanner := &scanCounter{}
+	handler := (&Server{Discovery: scanner}).Handler()
 	request := func(method, target, origin, body string, header bool) *httptest.ResponseRecorder {
 		req := httptest.NewRequest(method, target, strings.NewReader(body))
 		if origin != "" {
@@ -53,8 +39,8 @@ func TestScanEndpoint(t *testing.T) {
 		handler.ServeHTTP(w, req)
 		return w
 	}
-	if w := request("GET", "/api/printer", "", "", false); w.Code != 200 || r.calls.Load() != 0 {
-		t.Fatalf("GET: %d %d", w.Code, r.calls.Load())
+	if w := request("GET", "/api/printer", "", "", false); w.Code != 200 {
+		t.Fatalf("GET: %d", w.Code)
 	}
 	if w := request("POST", "/api/printer/scan", "http://evil.example", "", true); w.Code != 403 {
 		t.Fatalf("origin: %d", w.Code)
@@ -67,14 +53,10 @@ func TestScanEndpoint(t *testing.T) {
 			t.Fatalf("parameters: %d", w.Code)
 		}
 	}
-	done := make(chan *httptest.ResponseRecorder, 1)
-	go func() { done <- request("POST", "/api/printer/scan", "http://example.com", "", true) }()
-	<-r.started
-	if w := request("POST", "/api/printer/scan", "", "", true); w.Code != 409 || !strings.Contains(w.Body.String(), "scan_in_progress") {
-		t.Fatalf("busy: %d %s", w.Code, w.Body.String())
+	if scanner.calls.Load() != 0 {
+		t.Fatal("invalid request triggered network discovery")
 	}
-	close(r.release)
-	if w := <-done; w.Code != 503 || !strings.Contains(w.Body.String(), "discovery_unavailable") {
-		t.Fatalf("failure: %d %s", w.Code, w.Body.String())
+	if w := request("POST", "/api/printer/scan", "http://example.com", "", true); w.Code != 503 || scanner.calls.Load() != 1 {
+		t.Fatalf("valid request: %d calls=%d", w.Code, scanner.calls.Load())
 	}
 }
